@@ -1,5 +1,11 @@
 # Picking Geek
 
+## Version 1.02.1
+
+- Successful Google sign-in now updates `User.last_login` for both new and existing users.
+- Regression tests cover first sign-in, repeat sign-in, and rejected credentials.
+- No database migration is required. Deploy this version and sign in again to record a new login timestamp.
+
 ## Version 1.02
 
 - Django app, imports, tests, and migration references now use `pickinggeek`.

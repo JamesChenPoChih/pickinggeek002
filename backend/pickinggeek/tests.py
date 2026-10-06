@@ -1,8 +1,9 @@
 import os
-from datetime import date
+from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
+from django.utils import timezone
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
@@ -54,12 +55,44 @@ class GoogleLoginTests(TestCase):
         user = User.objects.get(google_subject="google-account-123")
         self.assertEqual(user.email, "investor@example.com")
         self.assertFalse(user.has_usable_password())
+        self.assertIsNotNone(user.last_login)
+        self.assertTrue(timezone.is_aware(user.last_login))
+
+    @override_settings(GOOGLE_OAUTH_CLIENT_ID="web-client-id.apps.googleusercontent.com")
+    @patch("pickinggeek.api.google_id_token.verify_oauth2_token")
+    def test_repeat_google_login_updates_last_login_without_duplicate_user(self, verify_mock):
+        old_login = timezone.now() - timedelta(days=1)
+        user = User.objects.create_user(
+            username="google-account", google_subject="google-account-123",
+            email="investor@example.com", last_login=old_login,
+        )
+        verify_mock.return_value = {
+            "sub": "google-account-123",
+            "email": "investor@example.com",
+            "email_verified": True,
+        }
+
+        before_login = timezone.now()
+        response = self.client.post("/api/auth/google/", {"credential": "valid-id-token"}, format="json")
+
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertGreaterEqual(user.last_login, before_login)
+        self.assertLessEqual(user.last_login, timezone.now())
+        self.assertEqual(User.objects.filter(google_subject="google-account-123").count(), 1)
 
     @override_settings(GOOGLE_OAUTH_CLIENT_ID="web-client-id.apps.googleusercontent.com")
     @patch("pickinggeek.api.google_id_token.verify_oauth2_token", side_effect=ValueError)
     def test_google_login_rejects_invalid_token(self, _verify_mock):
+        old_login = timezone.now() - timedelta(days=1)
+        user = User.objects.create_user(
+            username="existing-google-user", google_subject="google-account-123",
+            last_login=old_login,
+        )
         response = self.client.post("/api/auth/google/", {"credential": "invalid"}, format="json")
         self.assertEqual(response.status_code, 400)
+        user.refresh_from_db()
+        self.assertEqual(user.last_login, old_login)
 
 
 class TierLimitTests(TestCase):

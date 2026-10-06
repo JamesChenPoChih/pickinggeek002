@@ -8,6 +8,7 @@ from django.conf import settings
 from django.db import transaction
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from rest_framework import status, viewsets
@@ -76,6 +77,7 @@ def google_login(request):
             user.first_name = defaults["first_name"]
             user.last_name = defaults["last_name"]
             user.avatar_url = defaults["avatar_url"]
+        user.last_login = timezone.now()
         user.save()
 
     refresh = RefreshToken.for_user(user)
