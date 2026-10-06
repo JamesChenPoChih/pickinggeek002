@@ -1,7 +1,7 @@
 from django.apps import AppConfig
 
 
-class MarketpulseConfig(AppConfig):
+class PickinggeekConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "marketpulse"
+    name = "pickinggeek"
     verbose_name = "Picking Geek"

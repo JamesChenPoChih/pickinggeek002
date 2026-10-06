@@ -3,7 +3,7 @@ import os
 from django.core.management.base import BaseCommand, CommandError
 from openai import OpenAI
 
-from marketpulse.services.llm_router import LLMRouter
+from pickinggeek.services.llm_router import LLMRouter
 
 
 class Command(BaseCommand):

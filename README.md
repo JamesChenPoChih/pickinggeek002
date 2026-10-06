@@ -1,5 +1,13 @@
 # Picking Geek
 
+## Version 1.02
+
+- Django app, imports, tests, and migration references now use `pickinggeek`.
+- The configured Neon database has been renamed in place to `pickinggeek_*`, preserving user data, permissions, and migration history.
+- Set `DATABASE_URL` in the Render backend environment to the intended Neon connection string before deploying. Local `.env` settings are not transferred to Render.
+- Existing databases with the old app label require a coordinated table and migration-history rename before running this version. Do not run the new initial migrations over an unmigrated legacy database. The configured Neon database already completed this transition.
+- Fresh databases can be initialized with `python backend/manage.py migrate`.
+
 Picking Geek 是個人 AI 投資研究 Copilot，聚焦美股與台股，將 MACD、60/100/200 日均線、每日訊號通知與 Nemotron AI 分析整合在同一個工作介面。Free 用戶最多追蹤 1 支股票，Pro 用戶可追蹤不限支數。
 
 > 本專案提供研究工具，不構成投資建議，也不承諾任何報酬。
@@ -147,7 +155,7 @@ REDIS_URL=redis://redis:6379/0
 ```powershell
 .\.venv\Scripts\python backend\manage.py check
 .\.venv\Scripts\python backend\manage.py check_nebius --chat --stream
-.\.venv\Scripts\python backend\manage.py test marketpulse
+.\.venv\Scripts\python backend\manage.py test pickinggeek
 Set-Location frontend
 npm run build
 ```

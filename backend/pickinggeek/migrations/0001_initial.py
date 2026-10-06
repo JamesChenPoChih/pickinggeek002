@@ -70,7 +70,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('sent_at', models.DateTimeField(blank=True, null=True)),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='notifications', to=settings.AUTH_USER_MODEL)),
-                ('stock', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='marketpulse.stock')),
+                ('stock', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, to='pickinggeek.stock')),
             ],
         ),
         migrations.CreateModel(
@@ -92,7 +92,7 @@ class Migration(migrations.Migration):
                 ('summary', models.TextField(blank=True)),
                 ('chart_points', models.JSONField(blank=True, default=list)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
-                ('stock', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='indicator', to='marketpulse.stock')),
+                ('stock', models.OneToOneField(on_delete=django.db.models.deletion.CASCADE, related_name='indicator', to='pickinggeek.stock')),
             ],
         ),
         migrations.CreateModel(
@@ -100,7 +100,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('stock', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='followers', to='marketpulse.stock')),
+                ('stock', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='followers', to='pickinggeek.stock')),
                 ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='tracked_stocks', to=settings.AUTH_USER_MODEL)),
             ],
             options={

@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from django.core.management.base import BaseCommand
 
-from marketpulse.models import Stock, TechnicalIndicatorCache, User, UserStock
+from pickinggeek.models import Stock, TechnicalIndicatorCache, User, UserStock
 
 
 STOCKS = [

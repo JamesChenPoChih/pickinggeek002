@@ -35,7 +35,7 @@ class GoogleLoginTests(TestCase):
         self.assertEqual(response.data["client_id"], "web-client-id.apps.googleusercontent.com")
 
     @override_settings(GOOGLE_OAUTH_CLIENT_ID="web-client-id.apps.googleusercontent.com")
-    @patch("marketpulse.api.google_id_token.verify_oauth2_token")
+    @patch("pickinggeek.api.google_id_token.verify_oauth2_token")
     def test_google_login_creates_user_and_returns_jwt(self, verify_mock):
         verify_mock.return_value = {
             "sub": "google-account-123",
@@ -56,7 +56,7 @@ class GoogleLoginTests(TestCase):
         self.assertFalse(user.has_usable_password())
 
     @override_settings(GOOGLE_OAUTH_CLIENT_ID="web-client-id.apps.googleusercontent.com")
-    @patch("marketpulse.api.google_id_token.verify_oauth2_token", side_effect=ValueError)
+    @patch("pickinggeek.api.google_id_token.verify_oauth2_token", side_effect=ValueError)
     def test_google_login_rejects_invalid_token(self, _verify_mock):
         response = self.client.post("/api/auth/google/", {"credential": "invalid"}, format="json")
         self.assertEqual(response.status_code, 400)
@@ -128,8 +128,8 @@ class YahooStockSearchTests(TestCase):
         self.user = User.objects.create_user(username="searcher", password="test")
         self.client.force_authenticate(self.user)
 
-    @patch("marketpulse.api.enrich_market_assets")
-    @patch("marketpulse.api.search_market_assets")
+    @patch("pickinggeek.api.enrich_market_assets")
+    @patch("pickinggeek.api.search_market_assets")
     def test_search_returns_us_equities(self, search_mock, enrich_mock):
         search_mock.return_value = [{
             "symbol": "MSFT",
@@ -161,7 +161,7 @@ class YahooStockSearchTests(TestCase):
         self.assertEqual([item["symbol"] for item in response.data], ["NVDA"])
         self.assertTrue(UserStock.objects.filter(user=self.user, stock__symbol="NVDA").exists())
 
-    @patch("marketpulse.api.get_price_chart")
+    @patch("pickinggeek.api.get_price_chart")
     def test_stock_chart_returns_yahoo_prices(self, chart_mock):
         stock = Stock.objects.create(symbol="NVDA", market="US", name="NVIDIA")
         chart_mock.return_value = {
@@ -173,7 +173,7 @@ class YahooStockSearchTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["points"][0]["price"], 222)
 
-    @patch("marketpulse.api.get_market_asset")
+    @patch("pickinggeek.api.get_market_asset")
     def test_add_yahoo_asset_to_watchlist(self, asset_mock):
         self.user.tier = User.Tier.PRO
         self.user.save(update_fields=["tier"])

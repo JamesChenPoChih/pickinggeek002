@@ -5,7 +5,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from config.views import health_check, service_status
-from marketpulse.api import (
+from pickinggeek.api import (
     StockViewSet,
     UserStockViewSet,
     add_yahoo_to_watchlist,
