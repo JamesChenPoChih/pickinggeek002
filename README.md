@@ -1,5 +1,13 @@
 # Picking Geek
 
+## Version 1.03 - 加入台股帳號
+
+- Search now includes a US / Taiwan market switch while retaining the existing layout.
+- Taiwan listed stocks, OTC stocks, and ETFs can be searched by symbol or English name and added to the user's watchlist with the correct market and TWD currency.
+- Charts support selectable MA60, MA100, MA200, MA250, and a synchronized MACD panel, calculated from daily price history.
+- Mouse-wheel zoom, drag-to-pan, mobile pinch zoom, and zoom/reset buttons share the same time window across price and MACD charts.
+- No database migration is required. Membership tiers remain database settings and are not changed by this release.
+
 ## Version 1.02.1
 
 - Successful Google sign-in now updates `User.last_login` for both new and existing users.

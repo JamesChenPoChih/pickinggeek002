@@ -17,6 +17,7 @@ const ACCESS_KEY = "pickinggeek_access";
 const REFRESH_KEY = "pickinggeek_refresh";
 const USER_KEY = "pickinggeek_user";
 const POPULAR_SYMBOLS = ["VOO", "QQQ", "NVDA", "AAPL", "BTC-USD", "GC=F"];
+const TW_POPULAR_SYMBOLS = ['2330', '2317', '2454', '0050', '0056', '6488'];
 
 function makeChart(base: number, offset = 0): ChartPoint[] {
   return Array.from({ length: 36 }, (_, index) => {
@@ -67,7 +68,8 @@ function IndexView({ stocks, onOpen }: { stocks: StockPosition[]; onOpen: (stock
 }
 
 function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: StockPosition[]; onOpen: (stock: StockPosition) => void; onAdd: (stock: StockApiResponse) => void }) {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const [market, setMarket] = useState<'US' | 'TW'>('US');
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<YahooStockResult[]>([]);
   const [loading, setLoading] = useState(false);
@@ -87,8 +89,11 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
       inFlight = true;
       if (firstRequest) setLoading(true);
       setError(false);
-      try { setResults(await searchYahooStocks(token, normalized, controller.signal)); }
-      catch (searchError) { if (!(searchError instanceof DOMException && searchError.name === "AbortError")) setError(true); }
+      try {
+        const rows = await searchYahooStocks(token, normalized, controller.signal, market);
+        if (!controller.signal.aborted) setResults(rows);
+      }
+      catch (searchError) { if (!controller.signal.aborted && !(searchError instanceof DOMException && searchError.name === "AbortError")) setError(true); }
       finally {
         inFlight = false;
         firstRequest = false;
@@ -100,13 +105,13 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
       interval = window.setInterval(refreshResults, 5000);
     }, 350);
     return () => { window.clearTimeout(timer); window.clearInterval(interval); controller.abort(); };
-  }, [query, token]);
+  }, [query, token, market]);
 
   async function addToMyStock(result: YahooStockResult) {
     setAddingSymbol(result.symbol);
     setAddError("");
     try {
-      onAdd(await addYahooStock(token, result.symbol));
+      onAdd(await addYahooStock(token, result.symbol, result.market ?? market));
     } catch (addStockError) {
       setAddError(addStockError instanceof Error ? addStockError.message : t("addStockFailed"));
     } finally {
@@ -117,15 +122,24 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
   return (
     <div className="px-5 py-5">
       <h1 className="text-2xl font-black text-slate-950">{t("searchStocks")}</h1>
-      <p className="mt-1 text-xs text-slate-400">{t("searchHint")}</p>
+      <p className="mt-1 text-xs text-slate-400">{market === 'TW' ? (language === 'zh' ? 'Yahoo 台股 · 上市／上櫃 · ETF' : 'Yahoo Taiwan · TWSE / TPEx · ETFs') : t("searchHint")}</p>
+      <div className="mt-4 flex items-center gap-3" aria-label={language === 'zh' ? '搜尋市場' : 'Search market'}>
+        <span className={`text-xs font-semibold ${market === 'US' ? 'text-slate-900' : 'text-slate-400'}`}>{language === 'zh' ? '美股' : 'US'}</span>
+        <button type="button" role="switch" aria-label={language === 'zh' ? '台股市場' : 'Taiwan market'} aria-checked={market === 'TW'} disabled={Boolean(addingSymbol)} onClick={() => {
+          setMarket(market === 'US' ? 'TW' : 'US'); setQuery(''); setResults([]); setError(false); setAddError(''); setLoading(false);
+        }} className={`relative h-8 w-14 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 disabled:opacity-50 ${market === 'TW' ? 'bg-emerald-500' : 'bg-slate-400'}`}>
+          <span className={`absolute left-1 top-1 size-6 rounded-full bg-white shadow-sm transition-transform ${market === 'TW' ? 'translate-x-6' : 'translate-x-0'}`} />
+        </button>
+        <span className={`text-xs font-semibold ${market === 'TW' ? 'text-slate-900' : 'text-slate-400'}`}>{language === 'zh' ? '台股' : 'Taiwan'}</span>
+      </div>
       <div className="mt-5 flex h-12 items-center gap-2 rounded-md border border-slate-300 px-3 focus-within:border-slate-950">
         <Search size={18} className="text-slate-400" />
-        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("searchPlaceholder")} className="min-w-0 flex-1 border-0 bg-transparent text-sm uppercase outline-none placeholder:normal-case" />
+        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={market === 'TW' ? (language === 'zh' ? '輸入台股代號或英文名稱' : 'Taiwan symbol or English name') : t("searchPlaceholder")} className="min-w-0 flex-1 border-0 bg-transparent text-sm uppercase outline-none placeholder:normal-case" />
         {loading && <LoaderCircle size={17} className="animate-spin text-sky-600" />}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2" aria-label={t("popularStocks")}>
         <span className="mr-1 text-[10px] font-semibold text-slate-400">{t("popularStocks")}</span>
-        {POPULAR_SYMBOLS.map((symbol) => (
+        {(market === 'TW' ? TW_POPULAR_SYMBOLS : POPULAR_SYMBOLS).map((symbol) => (
           <button
             key={symbol}
             type="button"
@@ -142,7 +156,7 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
       {!loading && !error && query.trim() && !results.length && <p className="mt-4 text-sm text-slate-400">{t("noSearchResults")}</p>}
       <div className="mt-4 divide-y divide-slate-100">
         {results.map((result) => {
-          const localStock = stocks.find((stock) => stock.symbol.toUpperCase() === result.symbol);
+          const localStock = stocks.find((stock) => stock.market === (result.market ?? market) && stock.symbol.toUpperCase().replace(/\.TW$/, '') === result.symbol.replace(/\.TW$/, ''));
           const isAdding = addingSymbol === result.symbol;
           const assetLabel = { STOCK: t("assetStock"), ETF: t("assetEtf"), GOLD: t("assetGold"), BITCOIN: t("assetBitcoin") }[result.asset_type];
           const marketLabel = { PRE: t("marketPre"), REGULAR: t("marketOpen"), POST: t("marketPost"), CLOSED: t("marketClosed"), OPEN_24H: t("market24h"), UNAVAILABLE: t("priceUnavailable") }[result.market_state];

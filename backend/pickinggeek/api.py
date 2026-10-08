@@ -136,13 +136,16 @@ class UserStockViewSet(viewsets.ModelViewSet):
 
 @api_view(["GET"])
 def yahoo_stock_search(request):
+    market = str(request.query_params.get('market', 'US')).upper()
+    if market not in Stock.Market.values:
+        return Response({'detail': 'Invalid market'}, status=status.HTTP_400_BAD_REQUEST)
     query = str(request.query_params.get("q", "")).strip()
     if not query:
         return Response({"results": []})
     if len(query) > 50:
         return Response({"detail": "Search query is too long"}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        results = enrich_market_assets(search_market_assets(query))
+        results = enrich_market_assets(search_market_assets(query, market=market))
     except YahooFinanceError:
         return Response(
             {"detail": "Yahoo Finance search is temporarily unavailable"},
@@ -153,12 +156,15 @@ def yahoo_stock_search(request):
 
 @api_view(["POST"])
 def add_yahoo_to_watchlist(request):
+    market = str(request.data.get('market', 'US')).upper()
+    if market not in Stock.Market.values:
+        return Response({'detail': 'Invalid market'}, status=status.HTTP_400_BAD_REQUEST)
     symbol = str(request.data.get("symbol", "")).strip().upper()
     if not symbol or len(symbol) > 20:
         return Response({"detail": "Invalid stock symbol"}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        asset = get_market_asset(symbol)
+        asset = get_market_asset(symbol, market=market)
     except YahooFinanceError:
         return Response(
             {"detail": "Yahoo Finance search is temporarily unavailable"},
@@ -168,9 +174,9 @@ def add_yahoo_to_watchlist(request):
         return Response({"detail": "Investment symbol was not found"}, status=status.HTTP_404_NOT_FOUND)
 
     stock, _ = Stock.objects.update_or_create(
-        symbol=asset["symbol"],
-        market=Stock.Market.US,
-        defaults={"name": asset["name"], "currency": "USD", "is_active": True},
+        symbol=asset['symbol'].removesuffix('.TW') if market == 'TW' else asset['symbol'],
+        market=market,
+        defaults={"name": asset["name"], "currency": 'TWD' if market == 'TW' else 'USD', "is_active": True},
     )
     try:
         _, created = UserStock.objects.get_or_create(user=request.user, stock=stock)
@@ -195,7 +201,10 @@ def stock_price_chart(request, stock_id):
     stock = get_object_or_404(Stock, pk=stock_id, is_active=True)
     range_key = str(request.query_params.get("range", "1D")).upper()
     try:
-        payload = get_price_chart(stock.symbol, stock.market, range_key)
+        if request.query_params.get('technical') == 'true':
+            payload = get_price_chart(stock.symbol, stock.market, range_key, technical=True)
+        else:
+            payload = get_price_chart(stock.symbol, stock.market, range_key)
     except ValueError as exc:
         return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
     except YahooFinanceError:

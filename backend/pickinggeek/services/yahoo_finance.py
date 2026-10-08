@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
+import pandas as pd
 from django.core.cache import cache
 
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
@@ -44,23 +45,38 @@ def _market_state(meta: dict) -> str:
     return "CLOSED"
 
 
-def get_market_asset(symbol: str) -> dict | None:
+def get_market_asset(symbol: str, market: str = 'US') -> dict | None:
     normalized = symbol.strip().upper()
     if not normalized:
         return None
     return next(
-        (asset for asset in search_market_assets(normalized, limit=20) if asset["symbol"] == normalized),
+        (asset for asset in search_market_assets(normalized, limit=20, market=market) if asset["symbol"] == normalized),
         None,
     )
 
 
-def get_price_chart(symbol: str, market: str, range_key: str) -> dict:
+def daily_indicator_points(points: list[dict]) -> list[dict]:
+    frame = pd.DataFrame(points).sort_values('timestamp').drop_duplicates('timestamp').reset_index(drop=True)
+    close = frame['price']
+    for days in (60, 100, 200, 250):
+        frame[f'ma{days}'] = close.rolling(days, min_periods=days).mean()
+    macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
+    signal = macd.ewm(span=9, adjust=False).mean()
+    frame['macd'] = macd.where(frame.index >= 33)
+    frame['macd_signal'] = signal.where(frame.index >= 33)
+    frame['histogram'] = (macd - signal).where(frame.index >= 33)
+    return frame.astype(object).where(pd.notna(frame), None).to_dict('records')
+
+
+def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = False) -> dict:
     normalized_range = range_key.upper()
     if normalized_range not in {*CHART_RANGES, "3Y"}:
         raise ValueError("Unsupported chart range")
 
-    yahoo_symbol = f"{symbol}.TW" if market.upper() == "TW" else symbol
-    cache_key = f"yahoo-price-chart:v2:{yahoo_symbol}:{normalized_range}"
+    yahoo_symbol = f"{symbol}.TW" if market.upper() == "TW" and not symbol.upper().endswith(('.TW', '.TWO')) else symbol
+    if technical and normalized_range not in {'1M', '6M', 'YTD', '1Y', '3Y', '5Y', 'ALL'}:
+        raise ValueError('Technical charts require a daily range')
+    cache_key = f"yahoo-price-chart:v3:{yahoo_symbol}:{normalized_range}:{technical}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -69,7 +85,23 @@ def get_price_chart(symbol: str, market: str, range_key: str) -> dict:
         "includePrePost": "true" if normalized_range == "1D" else "false",
         "events": "div,splits",
     }
-    if normalized_range == "3Y":
+    cutoff = None
+    if technical:
+        now = pd.Timestamp.now(tz='UTC')
+        offsets = {'1M': pd.DateOffset(months=1), '6M': pd.DateOffset(months=6),
+                   '1Y': pd.DateOffset(years=1), '3Y': pd.DateOffset(years=3),
+                   '5Y': pd.DateOffset(years=5)}
+        cutoff = now.normalize().replace(month=1, day=1) if normalized_range == 'YTD' else (
+            now.normalize() - offsets[normalized_range] if normalized_range != 'ALL' else None
+        )
+        params.update({'interval': '1d', 'includePrePost': 'false'})
+        if cutoff is None:
+            params['range'] = 'max'
+        else:
+            # Warm up daily averages and EMAs before cropping the visible range.
+            params.update({'period1': int((cutoff - pd.Timedelta(days=730)).timestamp()),
+                           'period2': int(now.timestamp())})
+    elif normalized_range == "3Y":
         now = datetime.now(timezone.utc)
         params.update({
             "period1": int((now - timedelta(days=365 * 3)).timestamp()),
@@ -105,12 +137,19 @@ def get_price_chart(symbol: str, market: str, range_key: str) -> dict:
     if not points:
         raise YahooFinanceError("Yahoo Finance returned no price points")
 
+    if technical:
+        points = daily_indicator_points(points)
+        if cutoff is not None:
+            points = [point for point in points if point['timestamp'] >= cutoff.timestamp()]
+        if not points:
+            raise YahooFinanceError('No daily prices in the selected range')
+
     payload = {
         "symbol": symbol,
         "range": normalized_range,
         "currency": meta.get("currency", "USD"),
         "timezone": meta.get("exchangeTimezoneName", "America/New_York"),
-        "previous_close": meta.get("chartPreviousClose") or meta.get("previousClose"),
+        "previous_close": points[0]['price'] if technical else meta.get("chartPreviousClose") or meta.get("previousClose"),
         "current_price": meta.get("fulldayPrice") or points[-1]["price"],
         "market_state": _market_state(meta),
         "updated_at": points[-1]["timestamp"],
@@ -123,7 +162,7 @@ def get_price_chart(symbol: str, market: str, range_key: str) -> dict:
 def enrich_market_assets(assets: list[dict]) -> list[dict]:
     def fetch_snapshot(asset: dict) -> tuple[str, dict]:
         try:
-            chart = get_price_chart(asset["symbol"], "US", "1D")
+            chart = get_price_chart(asset["symbol"], asset.get('market', 'US'), "1D")
             previous = chart.get("previous_close")
             price = chart.get("current_price")
             change_percent = ((price - previous) / previous) * 100 if price is not None and previous else None
@@ -136,7 +175,7 @@ def enrich_market_assets(assets: list[dict]) -> list[dict]:
             }
         except YahooFinanceError:
             return asset["symbol"], {
-                "price": None, "change_percent": None, "currency": "USD",
+                "price": None, "change_percent": None, "currency": asset.get('currency', 'USD'),
                 "market_state": "UNAVAILABLE", "updated_at": None,
             }
 
@@ -149,12 +188,15 @@ def enrich_market_assets(assets: list[dict]) -> list[dict]:
     return [{**asset, **snapshots.get(asset["symbol"], {})} for asset in assets]
 
 
-def search_market_assets(query: str, limit: int = 12) -> list[dict]:
+def search_market_assets(query: str, limit: int = 12, market: str = 'US') -> list[dict]:
+    market = market.upper()
+    if market not in {'US', 'TW'}:
+        raise ValueError('Unsupported market')
     normalized = query.strip()
     if not normalized:
         return []
 
-    cache_key = f"yahoo-market-search:v4:{normalized.casefold()}:{limit}"
+    cache_key = f"yahoo-market-search:v5:{market}:{normalized.casefold()}:{limit}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -166,8 +208,8 @@ def search_market_assets(query: str, limit: int = 12) -> list[dict]:
                 "q": normalized,
                 "quotesCount": min(max(limit * 3, 20), 50),
                 "newsCount": 0,
-                "region": "US",
-                "lang": "en-US",
+                "region": 'TW' if market == 'TW' else 'US',
+                "lang": 'zh-TW' if market == 'TW' else 'en-US',
             },
             headers={"User-Agent": "Mozilla/5.0 PickingGeek/1.0"},
             timeout=8.0,
@@ -186,7 +228,10 @@ def search_market_assets(query: str, limit: int = 12) -> list[dict]:
         name = str(quote.get("longname") or quote.get("shortname") or symbol).strip()
         normalized_name = f" {name.casefold()}"
         asset_type = None
-        if quote_type == "EQUITY" and exchange in US_EQUITY_EXCHANGES:
+        if market == 'TW':
+            if symbol.endswith(('.TW', '.TWO')) and quote_type in {'EQUITY', 'ETF'}:
+                asset_type = 'ETF' if quote_type == 'ETF' else 'STOCK'
+        elif quote_type == "EQUITY" and exchange in US_EQUITY_EXCHANGES:
             if not any(term in normalized_name for term in NON_COMMON_EQUITY_TERMS):
                 asset_type = "STOCK"
         elif quote_type == "ETF" and exchange in US_EQUITY_EXCHANGES:
@@ -200,12 +245,14 @@ def search_market_assets(query: str, limit: int = 12) -> list[dict]:
         seen.add(symbol)
         results.append({
             "symbol": symbol,
+            "market": market,
+            "currency": 'TWD' if market == 'TW' else 'USD',
             "name": name,
             "exchange": exchange,
             "exchange_name": quote.get("exchDisp") or exchange,
             "sector": quote.get("sectorDisp") or quote.get("sector") or "",
             "asset_type": asset_type,
-            "yahoo_url": f"https://finance.yahoo.com/quote/{symbol}",
+            "yahoo_url": f"https://tw.stock.yahoo.com/quote/{symbol}" if market == 'TW' else f"https://finance.yahoo.com/quote/{symbol}",
         })
         if len(results) >= limit:
             break

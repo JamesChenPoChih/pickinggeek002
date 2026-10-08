@@ -2,13 +2,114 @@ import os
 from datetime import date, timedelta
 
 from django.core.exceptions import ValidationError
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 from unittest.mock import patch
 
 from .models import NotificationQueue, Stock, TechnicalIndicatorCache, User, UserStock
 from .services.llm_router import LLMRouter, NANO_MODEL, ULTRA_MODEL
+from .services.yahoo_finance import daily_indicator_points, get_price_chart, search_market_assets
+
+
+class TaiwanSearchTests(TestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.user = User.objects.create_user(username='taiwan', tier=User.Tier.PRO)
+        self.client = APIClient()
+        self.client.force_authenticate(self.user)
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_search_filters_markets_and_separates_cache(self, get_mock):
+        get_mock.return_value.json.return_value = {'quotes': [
+            {'symbol': '2330.TW', 'exchange': 'TAI', 'quoteType': 'EQUITY'},
+            {'symbol': '6488.TWO', 'exchange': 'TWO', 'quoteType': 'EQUITY'},
+            {'symbol': '0050.TW', 'exchange': 'TAI', 'quoteType': 'ETF'},
+            {'symbol': 'NVDA', 'exchange': 'NMS', 'quoteType': 'EQUITY'},
+        ]}
+        taiwan = search_market_assets('test', market='TW')
+        self.assertEqual([a['symbol'] for a in taiwan], ['2330.TW', '6488.TWO', '0050.TW'])
+        self.assertTrue(all(a['currency'] == 'TWD' for a in taiwan))
+        self.assertTrue(all(a['yahoo_url'].startswith('https://tw.stock.yahoo.com/') for a in taiwan))
+        self.assertEqual([a['symbol'] for a in search_market_assets('test')], ['NVDA'])
+        self.assertEqual(get_mock.call_count, 2)
+
+    @patch('pickinggeek.api.get_market_asset')
+    def test_add_taiwan_preserves_market_currency_and_otc_suffix(self, asset_mock):
+        listed = Stock.objects.create(symbol='2330', market='TW', name='Existing', currency='TWD')
+        for symbol in ['2330.TW', '6488.TWO']:
+            asset_mock.return_value = {'symbol': symbol, 'name': 'Taiwan company', 'market': 'TW'}
+            response = self.client.post('/api/watchlist/yahoo/', {'symbol': symbol, 'market': 'TW'}, format='json')
+            self.assertEqual(response.status_code, 201)
+            self.assertEqual(response.data['market'], 'TW')
+            self.assertEqual(response.data['currency'], 'TWD')
+            self.assertEqual(response.data['symbol'], symbol.removesuffix('.TW'))
+            if symbol == '2330.TW':
+                self.assertEqual(response.data['id'], listed.id)
+            asset_mock.assert_called_with(symbol, market='TW')
+        duplicate = self.client.post('/api/watchlist/yahoo/', {'symbol': '6488.TWO', 'market': 'TW'}, format='json')
+        self.assertEqual(duplicate.status_code, 200)
+        self.assertEqual(UserStock.objects.filter(user=self.user).count(), 2)
+
+    def test_rejects_unknown_market(self):
+        self.assertEqual(self.client.get('/api/stocks/search/', {'q': '2330', 'market': 'INVALID'}).status_code, 400)
+        self.assertEqual(self.client.post('/api/watchlist/yahoo/', {'symbol': '2330.TW', 'market': 'INVALID'}, format='json').status_code, 400)
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_chart_does_not_duplicate_taiwan_suffix(self, get_mock):
+        get_mock.return_value.json.return_value = {'chart': {'result': [{
+            'meta': {'currency': 'TWD'}, 'timestamp': [1000, 2000],
+            'indicators': {'quote': [{'close': [100, 101]}]},
+        }]}}
+        for symbol, expected in [('2330', '2330.TW'), ('2330.TW', '2330.TW'), ('6488.TWO', '6488.TWO')]:
+            from django.core.cache import cache
+            cache.clear()
+            get_price_chart(symbol, 'TW', '1D')
+            self.assertTrue(get_mock.call_args.args[0].endswith('/' + expected))
+
+
+class DailyIndicatorTests(SimpleTestCase):
+    def test_averages_require_full_daily_windows(self):
+        points = [{'timestamp': index * 86400, 'price': float(index + 1)} for index in range(300)]
+        result = daily_indicator_points(points)
+        self.assertIsNone(result[58]['ma60'])
+        self.assertEqual(result[59]['ma60'], 30.5)
+        self.assertIsNone(result[248]['ma250'])
+        self.assertEqual(result[249]['ma250'], 125.5)
+        self.assertEqual(result[-1]['ma200'], 200.5)
+        self.assertIsNone(result[32]['macd_signal'])
+        self.assertAlmostEqual(result[-1]['histogram'], result[-1]['macd'] - result[-1]['macd_signal'])
+
+    def test_flat_prices_produce_zero_macd(self):
+        points = [{'timestamp': index * 86400, 'price': 100.0} for index in range(300)]
+        result = daily_indicator_points(points)
+        self.assertEqual(result[-1]['ma250'], 100)
+        self.assertEqual(result[-1]['macd'], 0)
+        self.assertEqual(result[-1]['macd_signal'], 0)
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_technical_request_warms_up_before_cropping(self, get_mock):
+        from django.core.cache import cache
+        cache.clear()
+        now = timezone.now().replace(hour=16, minute=0, second=0, microsecond=0)
+        timestamps = [int((now - timedelta(days=400-index)).timestamp()) for index in range(400)]
+        get_mock.return_value.json.return_value = {'chart': {'result': [{
+            'meta': {'currency': 'USD', 'exchangeTimezoneName': 'UTC'},
+            'timestamp': timestamps,
+            'indicators': {'quote': [{'close': [100.0] * 400}]},
+        }]}}
+        result = get_price_chart('TEST', 'US', '1M', technical=True)
+        self.assertLess(len(result['points']), 33)
+        self.assertEqual(result['points'][0]['ma250'], 100)
+        self.assertEqual(get_mock.call_args.kwargs['params']['interval'], '1d')
+        self.assertIn('period1', get_mock.call_args.kwargs['params'])
+        cache.clear()
+
+    def test_technical_mode_rejects_intraday_ranges(self):
+        with self.assertRaises(ValueError):
+            get_price_chart('TEST', 'US', '1D', technical=True)
 
 
 class RenderDeploymentTests(TestCase):

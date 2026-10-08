@@ -91,19 +91,19 @@ export async function fetchStocks(token: string): Promise<StockApiResponse[]> {
   return response.json();
 }
 
-export async function searchYahooStocks(token: string, query: string, signal?: AbortSignal): Promise<YahooStockResult[]> {
-  const params = new URLSearchParams({ q: query });
+export async function searchYahooStocks(token: string, query: string, signal?: AbortSignal, market: 'US' | 'TW' = 'US'): Promise<YahooStockResult[]> {
+  const params = new URLSearchParams({ q: query, market });
   const response = await authorizedFetch(`${API_BASE}/stocks/search/?${params}`, token, { signal });
   if (!response.ok) throw new Error(`Yahoo Finance search responded ${response.status}`);
   const payload = await response.json() as { results: YahooStockResult[] };
   return payload.results;
 }
 
-export async function addYahooStock(token: string, symbol: string): Promise<StockApiResponse> {
+export async function addYahooStock(token: string, symbol: string, market: 'US' | 'TW' = 'US'): Promise<StockApiResponse> {
   const response = await authorizedFetch(`${API_BASE}/watchlist/yahoo/`, token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbol }),
+    body: JSON.stringify({ symbol, market }),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({})) as { detail?: string };
@@ -119,8 +119,9 @@ export async function removeTrackedStock(token: string, stockId: number): Promis
   if (!response.ok) throw new Error(`Watchlist API responded ${response.status}`);
 }
 
-export async function fetchStockChart(token: string, stockId: number, range: ChartRange, signal?: AbortSignal): Promise<YahooChartResponse> {
+export async function fetchStockChart(token: string, stockId: number, range: ChartRange, signal?: AbortSignal, technical = false): Promise<YahooChartResponse> {
   const params = new URLSearchParams({ range });
+  if (technical) params.set('technical', 'true');
   const response = await authorizedFetch(`${API_BASE}/stocks/${stockId}/chart/?${params}`, token, { signal });
   if (!response.ok) throw new Error(`Yahoo Finance chart responded ${response.status}`);
   return response.json();

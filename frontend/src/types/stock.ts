@@ -76,6 +76,7 @@ export interface StockApiResponse {
 }
 
 export interface YahooStockResult {
+  market: 'US' | 'TW';
   symbol: string;
   name: string;
   exchange: string;
@@ -99,5 +100,10 @@ export interface YahooChartResponse {
   timezone: string;
   previous_close: number | null;
   current_price: number;
-  points: Array<{ timestamp: number; price: number }>;
+  points: Array<{
+    timestamp: number; price: number;
+    ma60?: number | null; ma100?: number | null;
+    ma200?: number | null; ma250?: number | null;
+    macd?: number | null; macd_signal?: number | null; histogram?: number | null;
+  }>;
 }
