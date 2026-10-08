@@ -1,4 +1,5 @@
-import { ChevronDown, LoaderCircle, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { useEffect, useId, useRef, useState } from 'react';
+import { Check, ChevronDown, LoaderCircle, Trash2, TrendingDown, TrendingUp } from "lucide-react";
 import type { StockPosition } from "../../types/stock";
 import { useLanguage } from "../../i18n";
 
@@ -22,18 +23,64 @@ function formatPrice(stock: StockPosition): string {
 export default function StockCard({ title, stock, stocks, onSelect, onRemove, removing, removeError }: StockCardProps) {
   const { t } = useLanguage();
   const positive = stock.changePercent >= 0;
+  const [open, setOpen] = useState(false);
+  const picker = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const listId = useId();
+  const groups = [
+    { market: 'US', title: 'US Stock' },
+    { market: 'TW', title: 'Taiwan Stock' },
+  ].map(group => ({ ...group, items: stocks.filter(item => item.market === group.market) }));
+  const focusOption = (last = false) => {
+    const options = picker.current?.querySelectorAll<HTMLButtonElement>('[role="option"]');
+    const selected = picker.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]');
+    (last ? options?.[options.length - 1] : selected ?? options?.[0])?.focus();
+  };
+  useEffect(() => {
+    if (!open) return;
+    focusOption();
+    const outside = (event: PointerEvent) => {
+      if (!picker.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [open]);
   return (
     <section className="rounded-md border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex items-start justify-between gap-3">
-        <div><p className="text-xs font-medium text-slate-400">{title}</p><h1 className="mt-1 text-lg font-bold text-slate-900">{stock.name}</h1><p className="text-[11px] text-slate-400">{stock.symbol} · {stock.market}</p></div>
+        <div className="min-w-0 flex-1"><p className="text-xs font-medium text-slate-400">{title}</p><h1 className="mt-1 break-words text-lg font-bold text-slate-900">{stock.name}</h1><p className="text-[11px] text-slate-400">{stock.symbol} · {stock.market}</p></div>
         <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <label className="relative">
-            <span className="sr-only">{t("selectStock")}</span>
-            <select value={stock.id} onChange={(event) => onSelect(stocks.find((item) => item.id === Number(event.target.value)) || stock)} className="appearance-none rounded-lg border border-slate-200 bg-slate-50 py-2 pl-3 pr-8 text-[11px] font-semibold text-slate-600 outline-none focus:border-sky-500">
-              {stocks.map((item) => <option key={item.id} value={item.id}>{item.symbol}</option>)}
-            </select>
-            <ChevronDown size={14} className="pointer-events-none absolute right-2 top-2.5 text-slate-400" />
-          </label>
+          <div ref={picker} className="relative" onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
+          }}>
+            <button ref={trigger} type="button" aria-label={t('selectStock')} aria-haspopup="listbox" aria-expanded={open} aria-controls={listId}
+              onClick={() => setOpen(value => !value)} onKeyDown={(event) => {
+                if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); setOpen(true); }
+              }} className="flex h-9 w-24 items-center justify-end gap-2 rounded-md border border-slate-200 bg-slate-50 px-2 text-[10px] font-semibold text-slate-700 hover:border-slate-300 focus-visible:outline-2 focus-visible:outline-sky-500">
+              <span className="min-w-0 truncate font-mono tabular-nums">{stock.symbol}</span>
+              <ChevronDown size={12} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+            </button>
+            {open && <div id={listId} role="listbox" aria-label={t('selectStock')} className="absolute right-0 top-full z-50 mt-1.5 max-h-72 w-40 overflow-y-auto rounded-md border border-slate-200 bg-white py-1 shadow-lg" onKeyDown={(event) => {
+              const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+              const index = options.indexOf(document.activeElement as HTMLButtonElement);
+              if (event.key === 'Escape') { event.preventDefault(); setOpen(false); trigger.current?.focus(); }
+              if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+                event.preventDefault();
+                const next = event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : (index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length;
+                options[next]?.focus();
+              }
+            }}>
+              {groups.filter(group => group.items.length).map(group => <div key={group.market} role="group" aria-label={group.title} className="border-t border-slate-100 first:border-t-0">
+                <div className="px-3 pb-1 pt-2 text-[13.5px] font-bold text-slate-500">{group.title}</div>
+                {group.items.map(item => <button key={item.id} type="button" role="option" aria-selected={item.id === stock.id} tabIndex={-1}
+                  onClick={() => { onSelect(item); setOpen(false); trigger.current?.focus(); }}
+                  className={`flex h-9 w-full items-center justify-between gap-2 px-3 text-[10px] hover:bg-slate-50 focus:bg-sky-50 focus:outline-none ${item.id === stock.id ? 'bg-sky-50 text-sky-700' : 'text-slate-600'}`}>
+                  <span className="w-3 shrink-0">{item.id === stock.id && <Check size={12} />}</span>
+                  <span className="min-w-0 flex-1 truncate text-right font-mono tabular-nums">{item.symbol}</span>
+                </button>)}
+              </div>)}
+            </div>}
+          </div>
           <button
             type="button"
             onClick={() => onRemove(stock)}
