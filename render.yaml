@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: pickinggeek0001
+    name: pickinggeek002
     runtime: python
     plan: free
     autoDeployTrigger: commit
@@ -19,9 +19,9 @@ services:
       - key: DJANGO_SUPERUSER_EMAIL
         sync: false
       - key: CORS_ALLOWED_ORIGINS
-        value: https://pickinggeek0001.onrender.com
+        value: https://pickinggeek002.onrender.com
       - key: CSRF_TRUSTED_ORIGINS
-        value: https://pickinggeek0001.onrender.com
+        value: https://pickinggeek002.onrender.com
       - key: GOOGLE_OAUTH_CLIENT_ID
         sync: false
       - key: VITE_GOOGLE_CLIENT_ID
