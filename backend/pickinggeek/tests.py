@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from .models import NotificationQueue, Stock, TechnicalIndicatorCache, User, UserStock
 from .services.llm_router import LLMRouter, NANO_MODEL, ULTRA_MODEL
-from .services.yahoo_finance import daily_indicator_points, get_price_chart, search_market_assets
+from .services.yahoo_finance import daily_indicator_points, get_price_chart, search_market_assets, YahooFinanceError
 from .services.native_names import native_stock_name
 
 
@@ -60,6 +60,40 @@ class TaiwanSearchTests(TestCase):
         self.user = User.objects.create_user(username='taiwan', tier=User.Tier.PRO)
         self.client = APIClient()
         self.client.force_authenticate(self.user)
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_chinese_search_resolves_stocks_etfs_and_filters_warrants(self, get_mock):
+        from unittest.mock import Mock
+        def response(url, **kwargs):
+            result = Mock()
+            if 'AutocompleteService' in url:
+                result.json.return_value = {'ResultSet': {'Result': [
+                    {'symbol': '2330.TW', 'name': '台積電'},
+                    {'symbol': '2330.TW', 'name': '台積電'},
+                    {'symbol': '056552.TW', 'name': '台積電權證'},
+                    {'symbol': '00631L.TW', 'name': '元大台灣50正2'},
+                    {'symbol': '6488.TWO', 'name': '環球晶'},
+                ]}}
+            else:
+                symbol = kwargs['params']['q']
+                result.json.return_value = {'quotes': [{'symbol': symbol,
+                    'longname': 'English name', 'quoteType': 'ETF' if symbol.startswith('00') else 'EQUITY'}]}
+            return result
+        get_mock.side_effect = response
+        results = search_market_assets('台', market='TW')
+        self.assertEqual([a['symbol'] for a in results], ['2330.TW', '00631L.TW', '6488.TWO'])
+        self.assertEqual(results[0]['name'], '台積電')
+        self.assertEqual(results[1]['asset_type'], 'ETF')
+        self.assertEqual(search_market_assets('台', market='TW'), results)
+        self.assertEqual(get_mock.call_count, 4)
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_chinese_search_empty_or_malformed_response(self, get_mock):
+        get_mock.return_value.json.return_value = {'ResultSet': {'Result': []}}
+        self.assertEqual(search_market_assets('不存在', market='TW'), [])
+        get_mock.return_value.json.return_value = {'error': 'bad response'}
+        with self.assertRaises(YahooFinanceError):
+            search_market_assets('錯誤', market='TW')
 
     @patch('pickinggeek.services.yahoo_finance.httpx.get')
     def test_search_filters_markets_and_separates_cache(self, get_mock):

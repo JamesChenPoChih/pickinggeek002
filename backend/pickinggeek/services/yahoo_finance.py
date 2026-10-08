@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 import pandas as pd
+import re
+from urllib.parse import quote as urlquote
 from django.core.cache import cache
 from .native_names import native_stock_name
 
@@ -192,6 +194,49 @@ def enrich_market_assets(assets: list[dict]) -> list[dict]:
     return [{**asset, **snapshots.get(asset["symbol"], {})} for asset in assets]
 
 
+def search_taiwan_names(query: str, limit: int) -> list[dict]:
+    try:
+        response = httpx.get(
+            'https://tw.stock.yahoo.com/_td-stock/api/resource/AutocompleteService;query='
+            + urlquote(query, safe=''),
+            headers={'User-Agent': 'Mozilla/5.0 PickingGeek/1.0'},
+            timeout=8.0,
+        )
+        response.raise_for_status()
+        candidates = response.json()['ResultSet']['Result']
+        if not isinstance(candidates, list):
+            raise ValueError('Invalid autocomplete response')
+    except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+        raise YahooFinanceError('Taiwan name search is temporarily unavailable') from exc
+
+    # Restrict autocomplete to ordinary stock / ETF symbols, excluding warrants.
+    names = {}
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        symbol = str(candidate.get('symbol', '')).upper()
+        if re.fullmatch(r'(?:\d{4,5}|00\d{3}[A-Z])\.(?:TW|TWO)', symbol):
+            names.setdefault(symbol, str(candidate.get('name') or symbol))
+    if not names:
+        return []
+
+    def resolve(item):
+        symbol, name = item
+        matches = search_market_assets(symbol, limit=20, market='TW')
+        asset = next((asset for asset in matches if asset['symbol'] == symbol), None)
+        if asset:
+            asset = {**asset, 'name': name}
+            cache.set(f'taiwan-native-name:v1:{symbol}', name, timeout=86400)
+        return asset
+
+    results = []
+    with ThreadPoolExecutor(max_workers=min(6, len(names))) as executor:
+        for asset in executor.map(resolve, list(names.items())[:limit]):
+            if asset:
+                results.append(asset)
+    return results
+
+
 def search_market_assets(query: str, limit: int = 12, market: str = 'US') -> list[dict]:
     market = market.upper()
     if market not in {'US', 'TW'}:
@@ -200,10 +245,15 @@ def search_market_assets(query: str, limit: int = 12, market: str = 'US') -> lis
     if not normalized:
         return []
 
-    cache_key = f"yahoo-market-search:v5:{market}:{normalized.casefold()}:{limit}"
+    cache_key = f"yahoo-market-search:v6:{market}:{normalized.casefold()}:{limit}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
+
+    if market == 'TW' and any('\u3400' <= char <= '\u9fff' for char in normalized):
+        results = search_taiwan_names(normalized, limit)
+        cache.set(cache_key, results, timeout=300)
+        return results
 
     try:
         response = httpx.get(

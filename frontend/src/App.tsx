@@ -134,7 +134,7 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
       </div>
       <div className="mt-5 flex h-12 items-center gap-2 rounded-md border border-slate-300 px-3 focus-within:border-slate-950">
         <Search size={18} className="text-slate-400" />
-        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={market === 'TW' ? (language === 'zh' ? '輸入台股代號或英文名稱' : 'Taiwan symbol or English name') : t("searchPlaceholder")} className="min-w-0 flex-1 border-0 bg-transparent text-sm uppercase outline-none placeholder:normal-case" />
+        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)} placeholder={market === 'TW' ? (language === 'zh' ? '輸入台股代號、中文或英文名稱' : 'Taiwan symbol, Chinese or English name') : t("searchPlaceholder")} className="min-w-0 flex-1 border-0 bg-transparent text-sm uppercase outline-none placeholder:normal-case" />
         {loading && <LoaderCircle size={17} className="animate-spin text-sky-600" />}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2" aria-label={t("popularStocks")}>
