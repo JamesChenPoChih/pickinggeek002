@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import httpx
 import pandas as pd
 from django.core.cache import cache
+from .native_names import native_stock_name
 
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -161,12 +162,14 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
 
 def enrich_market_assets(assets: list[dict]) -> list[dict]:
     def fetch_snapshot(asset: dict) -> tuple[str, dict]:
+        name = native_stock_name(asset['symbol'], asset.get('market', 'US'), asset['name'])
         try:
             chart = get_price_chart(asset["symbol"], asset.get('market', 'US'), "1D")
             previous = chart.get("previous_close")
             price = chart.get("current_price")
             change_percent = ((price - previous) / previous) * 100 if price is not None and previous else None
             return asset["symbol"], {
+                'name': name,
                 "price": price,
                 "change_percent": round(change_percent, 4) if change_percent is not None else None,
                 "currency": chart.get("currency", "USD"),
@@ -175,6 +178,7 @@ def enrich_market_assets(assets: list[dict]) -> list[dict]:
             }
         except YahooFinanceError:
             return asset["symbol"], {
+                'name': name,
                 "price": None, "change_percent": None, "currency": asset.get('currency', 'USD'),
                 "market_state": "UNAVAILABLE", "updated_at": None,
             }

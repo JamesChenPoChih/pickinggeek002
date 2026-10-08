@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from .models import Stock, TechnicalIndicatorCache, UserStock
+from .services.native_names import native_stock_name
 
 
 class IndicatorSerializer(serializers.ModelSerializer):
@@ -11,6 +12,10 @@ class IndicatorSerializer(serializers.ModelSerializer):
 
 class StockSerializer(serializers.ModelSerializer):
     indicator = IndicatorSerializer(read_only=True)
+    name = serializers.SerializerMethodField()
+
+    def get_name(self, stock):
+        return native_stock_name(stock.symbol, stock.market, stock.name)
 
     class Meta:
         model = Stock

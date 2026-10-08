@@ -20,6 +20,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from .models import NotificationQueue, Stock, TechnicalIndicatorCache, User, UserStock
 from .serializers import IndicatorSerializer, StockSerializer, UserStockSerializer
 from .services.llm_router import LLMRouter
+from .services.native_names import native_stock_name
 from .services.yahoo_finance import YahooFinanceError, enrich_market_assets, get_market_asset, get_price_chart, search_market_assets
 
 
@@ -176,7 +177,7 @@ def add_yahoo_to_watchlist(request):
     stock, _ = Stock.objects.update_or_create(
         symbol=asset['symbol'].removesuffix('.TW') if market == 'TW' else asset['symbol'],
         market=market,
-        defaults={"name": asset["name"], "currency": 'TWD' if market == 'TW' else 'USD', "is_active": True},
+        defaults={"name": native_stock_name(asset['symbol'], market, asset['name']), "currency": 'TWD' if market == 'TW' else 'USD', "is_active": True},
     )
     try:
         _, created = UserStock.objects.get_or_create(user=request.user, stock=stock)

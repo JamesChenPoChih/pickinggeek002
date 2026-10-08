@@ -10,10 +10,50 @@ from unittest.mock import patch
 from .models import NotificationQueue, Stock, TechnicalIndicatorCache, User, UserStock
 from .services.llm_router import LLMRouter, NANO_MODEL, ULTRA_MODEL
 from .services.yahoo_finance import daily_indicator_points, get_price_chart, search_market_assets
+from .services.native_names import native_stock_name
+
+
+class NativeNameTests(SimpleTestCase):
+    def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    @patch('pickinggeek.services.native_names.httpx.get')
+    def test_chinese_name_is_cached_and_used_for_existing_stock(self, get_mock):
+        from .serializers import StockSerializer
+        get_mock.return_value.text = '<meta property="og:title" content="台積電(2330.TW) 走勢圖 - Yahoo股市">'
+        stock = Stock(symbol='2330', market='TW', name='Taiwan Semiconductor', currency='TWD')
+        self.assertEqual(StockSerializer(stock).data['name'], '台積電')
+        self.assertEqual(native_stock_name('2330.TW', 'TW', stock.name), '台積電')
+        self.assertEqual(get_mock.call_count, 1)
+
+    @patch('pickinggeek.services.native_names.httpx.get')
+    def test_original_english_and_chinese_are_preserved(self, get_mock):
+        self.assertEqual(native_stock_name('NVDA', 'US', 'NVIDIA Corporation'), 'NVIDIA Corporation')
+        self.assertEqual(native_stock_name('2330', 'TW', '台積電'), '台積電')
+        get_mock.assert_not_called()
+
+    @patch('pickinggeek.services.native_names.httpx.get')
+    def test_wrong_symbol_metadata_falls_back(self, get_mock):
+        get_mock.return_value.text = '<meta property="og:title" content="其他公司(9999.TW) 走勢圖">'
+        self.assertEqual(native_stock_name('2330', 'TW', 'English name'), 'English name')
+
+    @patch('pickinggeek.services.native_names.httpx.get')
+    def test_network_failure_falls_back_and_is_cached(self, get_mock):
+        import httpx
+        get_mock.side_effect = httpx.ConnectError('unavailable')
+        self.assertEqual(native_stock_name('6488.TWO', 'TW', 'GlobalWafers'), 'GlobalWafers')
+        self.assertEqual(native_stock_name('6488.TWO', 'TW', 'GlobalWafers'), 'GlobalWafers')
+        self.assertEqual(get_mock.call_count, 1)
 
 
 class TaiwanSearchTests(TestCase):
     def setUp(self):
+        for target in ['pickinggeek.api.native_stock_name', 'pickinggeek.serializers.native_stock_name']:
+            patcher = patch(target, side_effect=lambda symbol, market, fallback: fallback)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         from django.core.cache import cache
         cache.clear()
         self.addCleanup(cache.clear)
