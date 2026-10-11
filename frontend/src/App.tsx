@@ -12,6 +12,7 @@ import NestedDetails from "./components/mobile/NestedDetails";
 import StockCard from "./components/mobile/StockCard";
 import type { ChartPoint, DetailNode, StockApiResponse, StockAppSchema, StockPosition, YahooChartResponse, YahooStockResult } from "./types/stock";
 import { useLanguage } from "./i18n";
+import { billingRequest, type BillingState } from "./api";
 
 const ACCESS_KEY = "pickinggeek_access";
 const REFRESH_KEY = "pickinggeek_refresh";
@@ -186,7 +187,7 @@ export default function App() {
   const [token, setToken] = useState(() => localStorage.getItem(ACCESS_KEY) ?? "");
   const [stocks, setStocks] = useState<StockPosition[]>(fallbackStocks);
   const [selectedId, setSelectedId] = useState(fallbackStocks[0].id);
-  const [activeTab, setActiveTab] = useState<TabId>("stocks");
+  const [activeTab, setActiveTab] = useState<TabId>(() => new URLSearchParams(window.location.search).has("billing") ? "me" : "stocks");
   const [liveQuote, setLiveQuote] = useState<YahooChartResponse | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [removeError, setRemoveError] = useState("");
@@ -210,6 +211,19 @@ export default function App() {
   }, []);
 
   useEffect(() => { if (token) fetchStocks(token).then((rows) => { if (rows.length) { const positions = rows.map(toPosition); setStocks(positions); setSelectedId(positions[0].id); } }).catch(() => undefined); }, [token]);
+  useEffect(() => {
+    if (!token) return;
+    let disposed = false;
+    const update = (user: AuthUser) => {
+      if (disposed) return;
+      setAuthUser(user);
+      localStorage.setItem(USER_KEY, JSON.stringify(user));
+    };
+    const handleBilling = (event: Event) => update((event as CustomEvent<AuthUser>).detail);
+    window.addEventListener("pickinggeek:billing-updated", handleBilling);
+    void billingRequest<BillingState>().then((state) => update(state.user)).catch(() => undefined);
+    return () => { disposed = true; window.removeEventListener("pickinggeek:billing-updated", handleBilling); };
+  }, [token]);
   const selected = useMemo(() => stocks.find((stock) => stock.id === selectedId) ?? stocks[0], [selectedId, stocks]);
   useEffect(() => {
     if (!token || activeTab !== "stocks") { setLiveQuote(null); return; }
@@ -240,7 +254,7 @@ export default function App() {
   const schema: StockAppSchema = {
     user: authUser
       ? { name: authUser.name, handle: authUser.email, avatarUrl: authUser.avatar, tier: authUser.tier }
-      : { name: "Cesar Williams", handle: "cesarwilliams", tier: "PRO" },
+      : { name: "Picking Geek", handle: "", tier: "FREE" },
     portfolio: { title: t("myStock"), selectedStockId: selected.id, stocks },
   };
 

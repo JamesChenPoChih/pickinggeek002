@@ -5,6 +5,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from config.views import health_check, service_status
+from pickinggeek import billing
 from pickinggeek.api import (
     StockViewSet,
     UserStockViewSet,
@@ -28,6 +29,10 @@ admin.site.site_title = "Picking Geek Admin"
 admin.site.index_title = "Picking Geek Management"
 
 urlpatterns = [
+    path("api/billing/", billing.billing_state),
+    path("api/billing/checkout/", billing.checkout),
+    path("api/billing/portal/", billing.portal),
+    path("api/billing/webhook/", billing.webhook),
     path("health/", health_check, name="health-check"),
     path("api/status/", service_status, name="service-status"),
     path("admin/", admin.site.urls),

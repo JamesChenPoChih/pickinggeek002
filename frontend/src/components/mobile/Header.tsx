@@ -17,7 +17,7 @@ export default function Header({ user }: HeaderProps) {
         )}
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-slate-900">{user.handle}</p>
-          <p className="text-[10px] text-slate-400">{user.tier === "PRO" ? t("proInvestor") : t("freePlan")}</p>
+          <p className="text-[10px] text-slate-400">{user.tier === "PREMIUM" ? "Premium" : user.tier === "PRO" ? t("proInvestor") : t("freePlan")}</p>
         </div>
       </div>
       <div className="flex items-center gap-1">

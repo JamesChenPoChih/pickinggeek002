@@ -8,6 +8,16 @@ services:
     startCommand: python backend/manage.py migrate && (python backend/manage.py createsuperuser --noinput || true) && python -m gunicorn --chdir backend config.wsgi:application --bind 0.0.0.0:$PORT --timeout 180 --access-logfile - --error-logfile -
     healthCheckPath: /health/
     envVars:
+      - key: BILLING_FRONTEND_URL
+        value: https://pickinggeek002.onrender.com
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: STRIPE_PRO_PRICE_ID
+        sync: false
+      - key: STRIPE_PREMIUM_PRICE_ID
+        sync: false
       - key: DJANGO_DEBUG
         value: "false"
       - key: DJANGO_SECRET_KEY

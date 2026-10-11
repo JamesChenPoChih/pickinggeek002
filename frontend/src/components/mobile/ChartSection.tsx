@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, Settings2, ZoomIn, ZoomOut } from 'lucide-react';
 import { useChartZoom } from './useChartZoom';
 import { Area, Bar, Cell, ComposedChart, Line, ReferenceLine, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
@@ -17,6 +17,17 @@ const averages = [
   { key: 'ma250', label: 'MA250', color: '#db2777' },
 ] as const;
 type AverageKey = typeof averages[number]['key'];
+const defaultColors = Object.fromEntries(averages.map(item => [item.key, item.color])) as Record<AverageKey, string>;
+const colorStorageKey = 'pickinggeek_indicator_colors';
+
+function readColors(): Record<AverageKey, string> {
+  try {
+    const saved = JSON.parse(localStorage.getItem(colorStorageKey) || '{}');
+    return Object.fromEntries(averages.map(item => [item.key,
+      typeof saved?.[item.key] === 'string' && /^#[0-9a-f]{6}$/i.test(saved[item.key]) ? saved[item.key] : item.color,
+    ])) as Record<AverageKey, string>;
+  } catch { return { ...defaultColors }; }
+}
 
 export default function ChartSection({ stock, token, liveQuote }: ChartSectionProps) {
   const { language, t } = useLanguage();
@@ -28,6 +39,11 @@ export default function ChartSection({ stock, token, liveQuote }: ChartSectionPr
   const [technical, setTechnical] = useState(false);
   const [selected, setSelected] = useState<AverageKey[]>(['ma60', 'ma200', 'ma250']);
   const [showMacd, setShowMacd] = useState(true);
+  const [colorSettings, setColorSettings] = useState(false);
+  const [colors, setColors] = useState(readColors);
+  useEffect(() => {
+    try { localStorage.setItem(colorStorageKey, JSON.stringify(colors)); } catch { /* Storage can be disabled. */ }
+  }, [colors]);
   const visibleRanges = technical ? ranges.filter((item) => item !== '1D' && item !== '1W') : ranges;
 
   useEffect(() => {
@@ -76,12 +92,12 @@ export default function ChartSection({ stock, token, liveQuote }: ChartSectionPr
         {isLoading && <div className="grid h-full place-items-center text-xs text-slate-400"><span className="animate-pulse">{t("chartLoading")}</span></div>}
         {!isLoading && error && !activeChart && <div className="grid h-full place-items-center px-5 text-center text-xs text-rose-600"><div><p>{t("chartUnavailable")}</p><button type="button" onClick={() => setRetryNonce((value) => value + 1)} className="mt-3 h-8 rounded border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700">{t("chartRetry")}</button></div></div>}
         {!isLoading && activeChart && (
-          <AreaChartView chart={visibleChart!} color={color} syncId={`stock-${stock.id}`} selected={technical ? selected : []} formatTimestamp={(value) => formatter.format(new Date(value * 1000))} />
+          <AreaChartView chart={visibleChart!} color={color} colors={colors} syncId={`stock-${stock.id}`} selected={technical ? selected : []} formatTimestamp={(value) => formatter.format(new Date(value * 1000))} />
         )}
       </div>
       {technical && showMacd && activeChart && !isLoading && <div className="mt-3 border-t border-slate-100 pt-3">
         <div className="mb-1 flex flex-wrap gap-3 px-1 text-[10px] font-medium">
-          <span className="text-slate-600">MACD (12, 26, 9)</span><span className="text-blue-600">DIF</span><span className="text-amber-600">DEA</span>
+          <span className="text-slate-900">MACD (12, 26, 9)</span><span className="text-slate-900">DIF</span><span className="text-slate-900">DEA</span>
         </div>
         <div ref={zoom.macdRef} {...zoom.handlers} style={{ touchAction: 'none' }} className="h-32 w-full select-none cursor-grab active:cursor-grabbing" data-chart="macd" data-visible-points={visibleChart?.points.length ?? 0} aria-label="MACD">
           <ResponsiveContainer width="100%" height="100%" minWidth={0}>
@@ -107,6 +123,7 @@ export default function ChartSection({ stock, token, liveQuote }: ChartSectionPr
       <div className="mt-3 border-t border-slate-200 px-1 pt-3">
         <div className="flex min-h-11 items-center justify-between gap-3">
           <label htmlFor="technical-chart-toggle" className="cursor-pointer text-sm font-semibold text-slate-700">{t('technicalIndicators')}{technical ? (language === 'zh' ? ' · 日線' : ' · Daily') : ''}</label>
+          <button type="button" aria-label={language === 'zh' ? '指標顏色設定' : 'Indicator colors'} title={language === 'zh' ? '指標顏色設定' : 'Indicator colors'} aria-expanded={colorSettings} aria-controls="indicator-color-settings" onClick={() => setColorSettings(value => !value)} className="ml-auto grid size-9 shrink-0 place-items-center rounded text-slate-900 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-sky-500"><Settings2 size={17} /></button>
           <button id="technical-chart-toggle" type="button" role="switch" aria-checked={technical} aria-controls="technical-chart-options" aria-label={t('technicalIndicators')} onClick={() => {
             setChart(null); setLoading(true); setError(false);
             if (!technical && (range === '1D' || range === '1W')) setRange('6M');
@@ -116,19 +133,29 @@ export default function ChartSection({ stock, token, liveQuote }: ChartSectionPr
           </button>
         </div>
         {technical && <fieldset id="technical-chart-options" aria-label={t('technicalIndicators')} className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-          {averages.map((average) => <label key={average.key} className="flex min-h-9 cursor-pointer items-center gap-1.5 text-xs font-semibold" style={{ color: average.color }}>
-            <input type="checkbox" className="size-4" style={{ accentColor: average.color }} checked={selected.includes(average.key)} onChange={() => setSelected((values) => values.includes(average.key) ? values.filter((key) => key !== average.key) : [...values, average.key])} />
+          {averages.map((average) => <label key={average.key} className="flex min-h-9 cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-900">
+            <input type="checkbox" className="size-4" style={{ accentColor: 'currentColor' }} checked={selected.includes(average.key)} onChange={() => setSelected((values) => values.includes(average.key) ? values.filter((key) => key !== average.key) : [...values, average.key])} />
             {average.label}
           </label>)}
-          <label className="flex min-h-9 cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-700"><input type="checkbox" className="size-4 accent-emerald-600" checked={showMacd} onChange={(event) => setShowMacd(event.target.checked)} />MACD</label>
+          <label className="flex min-h-9 cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-900"><input type="checkbox" className="size-4" style={{ accentColor: 'currentColor' }} checked={showMacd} onChange={(event) => setShowMacd(event.target.checked)} />MACD</label>
           {activeChart && selected.some((key) => !activeChart.points.some((point) => point[key] != null)) && <p className="w-full text-[10px] text-slate-500">{language === 'zh' ? '部分均線的歷史資料不足' : 'Insufficient history for some averages'}</p>}
+        </fieldset>}
+        {colorSettings && <fieldset id="indicator-color-settings" className="mt-3 border-t border-slate-200 pt-3 text-slate-900">
+          <legend className="px-1 text-xs font-semibold">{language === 'zh' ? '均線顏色' : 'Moving average colors'}</legend>
+          <div className="grid grid-cols-2 gap-x-5 gap-y-2">
+            {averages.map(average => <label key={average.key} className="flex min-h-10 items-center justify-between gap-2 text-xs font-semibold">
+              {average.label}
+              <input type="color" aria-label={`${average.label} ${language === 'zh' ? '線條顏色' : 'line color'}`} value={colors[average.key]} onChange={event => setColors(previous => ({ ...previous, [average.key]: event.target.value }))} className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5" />
+            </label>)}
+          </div>
+          <button type="button" onClick={() => setColors({ ...defaultColors })} className="mt-2 flex min-h-9 items-center gap-1.5 text-xs font-medium hover:underline"><RotateCcw size={13} />{language === 'zh' ? '恢復預設顏色' : 'Reset colors'}</button>
         </fieldset>}
       </div>
     </section>
   );
 }
 
-function AreaChartView({ chart, color, selected, syncId, formatTimestamp }: { chart: YahooChartResponse; color: string; selected: AverageKey[]; syncId: string; formatTimestamp: (value: number) => string }) {
+function AreaChartView({ chart, color, colors, selected, syncId, formatTimestamp }: { chart: YahooChartResponse; color: string; colors: Record<AverageKey, string>; selected: AverageKey[]; syncId: string; formatTimestamp: (value: number) => string }) {
   return (
     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
       <ComposedChart data={chart.points} syncId={syncId} margin={{ top: 8, right: 8, left: -25, bottom: 0 }}>
@@ -137,7 +164,7 @@ function AreaChartView({ chart, color, selected, syncId, formatTimestamp }: { ch
         <YAxis domain={["auto", "auto"]} tick={{ fill: "#94a3b8", fontSize: 9 }} axisLine={false} tickLine={false} width={55} />
         <Tooltip labelFormatter={(value) => formatTimestamp(Number(value))} formatter={(value, name) => [Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 }), name]} contentStyle={{ border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, boxShadow: "0 8px 24px rgba(15,23,42,.08)" }} />
         <Area dataKey="price" stroke={color} fill={color} fillOpacity={0.12} strokeWidth={2} dot={false} isAnimationActive={false} />
-        {averages.filter((average) => selected.includes(average.key)).map((average) => <Line key={average.key} dataKey={average.key} name={average.label} stroke={average.color} strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />)}
+        {averages.filter((average) => selected.includes(average.key)).map((average) => <Line key={average.key} dataKey={average.key} name={average.label} stroke={colors[average.key]} strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />)}
       </ComposedChart>
     </ResponsiveContainer>
   );

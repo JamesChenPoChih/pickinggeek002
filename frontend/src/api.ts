@@ -9,10 +9,31 @@ export interface AuthUser {
   name: string;
   email: string;
   avatar: string;
-  tier: "FREE" | "PRO";
+  tier: "FREE" | "PRO" | "PREMIUM";
 }
 
 export interface AuthTokens { access: string; refresh: string; user?: AuthUser }
+export interface BillingState {
+  configured: boolean;
+  sandbox: boolean;
+  user: AuthUser;
+  status: string;
+  has_customer: boolean;
+  has_subscription: boolean;
+  cancel_at_period_end: boolean;
+  period_end: number | null;
+}
+
+export async function billingRequest<T>(path = "", body?: object): Promise<T> {
+  const response = await authorizedFetch(`${API_BASE}/billing/${path}`, localStorage.getItem(ACCESS_KEY) || "", {
+    method: body ? "POST" : "GET",
+    headers: { "Content-Type": "application/json" },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || `Billing API responded ${response.status}`);
+  return payload as T;
+}
 export type AnalysisMode = "auto" | "quick" | "deep";
 export type StreamEvent =
   | { type: "meta"; model: string; mode: AnalysisMode }

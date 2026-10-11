@@ -1,12 +1,14 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
+import uuid
 
 
 class User(AbstractUser):
     class Tier(models.TextChoices):
         FREE = "FREE", "Free"
         PRO = "PRO", "Pro"
+        PREMIUM = "PREMIUM", "Premium"
 
     tier = models.CharField(max_length=8, choices=Tier.choices, default=Tier.FREE)
     google_subject = models.CharField(max_length=255, unique=True, null=True, blank=True)
@@ -14,7 +16,19 @@ class User(AbstractUser):
 
     @property
     def can_track_unlimited_stocks(self):
-        return self.tier == self.Tier.PRO
+        return self.tier in (self.Tier.PRO, self.Tier.PREMIUM)
+
+
+class BillingAccount(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="billing")
+    customer_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    subscription_id = models.CharField(max_length=255, blank=True)
+    status = models.CharField(max_length=32, default="none")
+    cancel_at_period_end = models.BooleanField(default=False)
+    period_end = models.BigIntegerField(null=True, blank=True)
+    checkout_id = models.CharField(max_length=255, blank=True)
+    checkout_key = models.UUIDField(default=uuid.uuid4)
+    updated_at = models.DateTimeField(auto_now=True)
 
 
 class Stock(models.Model):

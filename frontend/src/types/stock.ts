@@ -57,7 +57,7 @@ export interface StockAppSchema {
     name: string;
     handle: string;
     avatarUrl?: string;
-    tier: "FREE" | "PRO";
+    tier: "FREE" | "PRO" | "PREMIUM";
   };
   portfolio: {
     title: string;
