@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import httpx
 import pandas as pd
+import numpy as np
+from math import isfinite
 import re
 from urllib.parse import quote as urlquote
 from django.core.cache import cache
@@ -59,6 +61,8 @@ def get_market_asset(symbol: str, market: str = 'US') -> dict | None:
 
 
 def daily_indicator_points(points: list[dict]) -> list[dict]:
+    if not points:
+        return []
     frame = pd.DataFrame(points).sort_values('timestamp').drop_duplicates('timestamp').reset_index(drop=True)
     close = frame['price']
     for days in (60, 100, 200, 250):
@@ -68,6 +72,33 @@ def daily_indicator_points(points: list[dict]) -> list[dict]:
     frame['macd'] = macd.where(frame.index >= 33)
     frame['macd_signal'] = signal.where(frame.index >= 33)
     frame['histogram'] = (macd - signal).where(frame.index >= 33)
+    previous_histogram = frame['histogram'].shift(1)
+    frame['macd_cross'] = None
+    frame.loc[(previous_histogram <= 0) & (frame['histogram'] > 0), 'macd_cross'] = 'BULLISH'
+    frame.loc[(previous_histogram >= 0) & (frame['histogram'] < 0), 'macd_cross'] = 'BEARISH'
+    middle = close.rolling(20).mean()
+    deviation = close.rolling(20).std(ddof=0)
+    frame['bb_middle'] = middle
+    frame['bb_upper'] = middle + 2 * deviation
+    frame['bb_lower'] = middle - 2 * deviation
+    frame['bb_bandwidth'] = (frame['bb_upper'] - frame['bb_lower']) / middle.replace(0, np.nan)
+    # LazyBear KC defaults: 20-bar SMA of close and true range, multiplier 1.5.
+    high = frame.get('high', pd.Series(np.nan, index=frame.index)).astype(float)
+    low = frame.get('low', pd.Series(np.nan, index=frame.index)).astype(float)
+    true_range = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    true_range = true_range.where(high.notna() & low.notna())
+    frame['kc_upper'] = middle + 1.5 * true_range.rolling(20).mean()
+    frame['kc_lower'] = middle - 1.5 * true_range.rolling(20).mean()
+    ready = frame['kc_upper'].notna() & frame['bb_upper'].notna()
+    squeeze_on = (frame['bb_lower'] > frame['kc_lower']) & (frame['bb_upper'] < frame['kc_upper'])
+    squeeze_off = (frame['bb_lower'] < frame['kc_lower']) & (frame['bb_upper'] > frame['kc_upper'])
+    frame['squeeze_state'] = pd.Series(np.select([squeeze_on, squeeze_off], ['ON', 'OFF'], default='NEUTRAL')).where(ready)
+    frame['squeeze_released'] = (squeeze_on.shift(1, fill_value=False) & squeeze_off).where(ready)
+    center = ((high.rolling(20).max() + low.rolling(20).min()) / 2 + middle) / 2
+    momentum_source = close - center
+    frame['squeeze_momentum'] = momentum_source.rolling(20).apply(
+        lambda values: float(np.polyval(np.polyfit(np.arange(20), values, 1), 19)), raw=True,
+    )
     return frame.astype(object).where(pd.notna(frame), None).to_dict('records')
 
 
@@ -79,7 +110,7 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
     yahoo_symbol = f"{symbol}.TW" if market.upper() == "TW" and not symbol.upper().endswith(('.TW', '.TWO')) else symbol
     if technical and normalized_range not in {'1M', '6M', 'YTD', '1Y', '3Y', '5Y', 'ALL'}:
         raise ValueError('Technical charts require a daily range')
-    cache_key = f"yahoo-price-chart:v3:{yahoo_symbol}:{normalized_range}:{technical}"
+    cache_key = f"yahoo-price-chart:v4:{yahoo_symbol}:{normalized_range}:{technical}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -128,15 +159,21 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
         result = chart["result"][0]
         meta = result.get("meta", {})
         timestamps = result.get("timestamp", [])
-        closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        quote = result.get("indicators", {}).get("quote", [{}])[0]
+        closes = quote.get("close", [])
     except (httpx.HTTPError, ValueError, TypeError, KeyError, IndexError) as exc:
         raise YahooFinanceError("Yahoo Finance chart is temporarily unavailable") from exc
 
-    points = [
-        {"timestamp": timestamp, "price": round(float(close), 4)}
-        for timestamp, close in zip(timestamps, closes)
-        if close is not None
-    ]
+    points = []
+    for index, (timestamp, close) in enumerate(zip(timestamps, closes)):
+        if close is None or not isfinite(float(close)):
+            continue
+        point = {"timestamp": timestamp, "price": float(close), "close": float(close)}
+        for key in ('open', 'high', 'low'):
+            values = quote.get(key, [])
+            value = values[index] if index < len(values) else None
+            point[key] = float(value) if value is not None and isfinite(float(value)) else None
+        points.append(point)
     if not points:
         raise YahooFinanceError("Yahoo Finance returned no price points")
 

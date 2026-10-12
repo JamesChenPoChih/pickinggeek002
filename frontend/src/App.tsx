@@ -8,6 +8,7 @@ import ChartSection from "./components/mobile/ChartSection";
 import Header from "./components/mobile/Header";
 import { LoginScreen } from "./components/mobile/LoginScreen";
 import MeView from "./components/mobile/MeView";
+import StockTechnicalView from "./components/mobile/StockTechnicalView";
 import NestedDetails from "./components/mobile/NestedDetails";
 import StockCard from "./components/mobile/StockCard";
 import type { ChartPoint, DetailNode, StockApiResponse, StockAppSchema, StockPosition, YahooChartResponse, YahooStockResult } from "./types/stock";
@@ -63,8 +64,12 @@ const fallbackStocks: StockPosition[] = [
   { id: 3, symbol: "2330", market: "TW", name: "台積電", currency: "TWD", currentPrice: 1045, changePercent: 1.46, indicator: null, chartData: makeChart(1045, 9), nestedDetails: [{ id: "macd", label: "MACD", value: "BULLISH", tone: "positive" }] },
 ];
 
-function IndexView({ stocks, onOpen }: { stocks: StockPosition[]; onOpen: (stock: StockPosition) => void }) {
+function IndexView({ stocks, token }: { stocks: StockPosition[]; token: string }) {
+  const [technicalId, setTechnicalId] = useState<number | null>(null);
+  const onOpen = (stock: StockPosition) => setTechnicalId(stock.id);
   const { t } = useLanguage();
+  const technicalStock = stocks.find(stock => stock.id === technicalId);
+  if (technicalStock) return <StockTechnicalView stock={technicalStock} token={token} onBack={() => setTechnicalId(null)} />;
   return <div className="px-5 py-5"><div className="mb-5"><p className="text-xs font-semibold text-sky-700">{t("brandName")}</p><h1 className="mt-1 text-2xl font-black text-slate-950">{t("todayMarket")}</h1></div><div className="grid grid-cols-2 gap-3"><div className="rounded-md bg-slate-950 p-4 text-white"><p className="text-xs text-slate-400">{t("trackedAssets")}</p><strong className="mt-2 block text-3xl">{stocks.length}</strong></div><div className="rounded-md bg-emerald-50 p-4 text-emerald-800"><p className="text-xs text-emerald-600">{t("bullishSignals")}</p><strong className="mt-2 block text-3xl">{stocks.filter((item) => item.changePercent >= 0).length}</strong></div></div><h2 className="mb-2 mt-6 text-sm font-bold text-slate-950">{t("marketSnapshot")}</h2><div className="divide-y divide-slate-100 border-y border-slate-100">{stocks.map((stock) => <button key={stock.id} type="button" onClick={() => onOpen(stock)} className="flex w-full items-center gap-3 py-4 text-left"><span className="grid size-10 place-items-center rounded-md bg-slate-100 text-slate-700"><BarChart3 size={18} /></span><span className="min-w-0 flex-1"><strong className="block text-sm text-slate-900">{stock.name}</strong><small className="text-slate-400">{stock.symbol} · {stock.market}</small></span><span className={`text-sm font-bold ${stock.changePercent >= 0 ? "text-emerald-600" : "text-rose-600"}`}>{stock.changePercent >= 0 ? "+" : ""}{stock.changePercent.toFixed(2)}%</span><ChevronRight size={16} className="text-slate-300" /></button>)}</div></div>;
 }
 
@@ -319,7 +324,7 @@ export default function App() {
               <AIAnalysisPanel stock={selected} token={token} />
             </div>
           )}
-          {activeTab === "index" && <IndexView stocks={stocks} onOpen={openStock} />}
+          {activeTab === "index" && <IndexView stocks={stocks} token={token} />}
           {activeTab === "search" && <SearchView token={token} stocks={stocks} onOpen={openStock} onAdd={addStock} />}
           {activeTab === "me" && <MeView user={schema.user} onLogout={logout} />}
         </main>

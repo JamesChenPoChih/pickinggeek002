@@ -102,8 +102,14 @@ export interface YahooChartResponse {
   current_price: number;
   points: Array<{
     timestamp: number; price: number;
+    open?: number | null; high?: number | null; low?: number | null; close?: number | null;
     ma60?: number | null; ma100?: number | null;
     ma200?: number | null; ma250?: number | null;
     macd?: number | null; macd_signal?: number | null; histogram?: number | null;
+    macd_cross?: 'BULLISH' | 'BEARISH' | null;
+    bb_middle?: number | null; bb_upper?: number | null; bb_lower?: number | null; bb_bandwidth?: number | null;
+    kc_upper?: number | null; kc_lower?: number | null;
+    squeeze_state?: 'ON' | 'OFF' | 'NEUTRAL' | null;
+    squeeze_momentum?: number | null; squeeze_released?: boolean | null;
   }>;
 }
