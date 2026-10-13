@@ -1,6 +1,8 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models, transaction
+from django.utils import timezone
 import uuid
 
 
@@ -48,6 +50,33 @@ class Stock(models.Model):
 
     def __str__(self):
         return f"{self.symbol} ({self.market})"
+
+
+class PopularStock(models.Model):
+    class RankingSource(models.TextChoices):
+        MANUAL = "MANUAL", "Manual"
+        FOLLOWERS = "FOLLOWERS", "Followers"
+        UNIQUE_QUERIES = "UNIQUE_QUERIES", "Unique querying users"
+
+    stock = models.OneToOneField(Stock, on_delete=models.CASCADE, related_name="popular_ranking")
+    rank = models.PositiveSmallIntegerField(unique=True, validators=[MinValueValidator(1), MaxValueValidator(100)])
+    popularity_count = models.PositiveBigIntegerField(default=0)
+    ranking_source = models.CharField(max_length=16, choices=RankingSource.choices, default=RankingSource.MANUAL)
+    as_of_date = models.DateField(default=timezone.localdate)
+    window_days = models.PositiveSmallIntegerField(default=30, validators=[MinValueValidator(1)])
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "pickinggeek_popular_stock"
+        ordering = ["rank"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(rank__gte=1, rank__lte=100), name="popular_rank_1_100"),
+            models.CheckConstraint(condition=models.Q(window_days__gte=1), name="popular_window_positive"),
+            models.CheckConstraint(condition=models.Q(ranking_source__in=["MANUAL", "FOLLOWERS", "UNIQUE_QUERIES"]), name="popular_ranking_source_valid"),
+        ]
+
+    def __str__(self):
+        return f"#{self.rank} {self.stock}"
 
 
 class UserStock(models.Model):
