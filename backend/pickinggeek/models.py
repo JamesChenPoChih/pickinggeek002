@@ -1,8 +1,9 @@
 from django.contrib.auth.models import AbstractUser
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxLengthValidator, MaxValueValidator, MinLengthValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
+from pgvector.django import VectorField
 import uuid
 
 
@@ -77,6 +78,87 @@ class PopularStock(models.Model):
 
     def __str__(self):
         return f"#{self.rank} {self.stock}"
+
+
+class StockKnowledgeState(models.Model):
+    class Status(models.TextChoices):
+        NOT_BUILT = "NOT_BUILT", "Not built"
+        QUEUED = "QUEUED", "Queued"
+        BUILDING = "BUILDING", "Building"
+        READY = "READY", "Ready"
+        FAILED = "FAILED", "Failed"
+
+    stock = models.OneToOneField(Stock, primary_key=True, on_delete=models.CASCADE, related_name="knowledge_state")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.NOT_BUILT)
+    updated_at = models.DateTimeField(auto_now=True)
+    expires_at = models.DateTimeField(null=True, blank=True)
+    last_requested_at = models.DateTimeField(null=True, blank=True, db_index=True)
+
+    class Meta:
+        db_table = "pickinggeek_stock_knowledge_state"
+        indexes = [models.Index(fields=["status", "expires_at"], name="knowledge_status_expiry_idx")]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(status__in=["NOT_BUILT", "QUEUED", "BUILDING", "READY", "FAILED"]), name="knowledge_status_valid"),
+            models.CheckConstraint(condition=~models.Q(status="READY") | models.Q(expires_at__isnull=False), name="knowledge_ready_has_expiry"),
+        ]
+
+    @property
+    def needs_refresh(self):
+        return self.status != self.Status.READY or self.expires_at is None or self.expires_at <= timezone.now()
+
+    def __str__(self):
+        return f"{self.stock}: {self.status}"
+
+
+class KnowledgeDocument(models.Model):
+    class SourceType(models.TextChoices):
+        NEWS = "NEWS", "News"
+        REPORT = "REPORT", "Financial report"
+        FILING = "FILING", "Company filing"
+        ANALYSIS = "ANALYSIS", "Analysis"
+        OTHER = "OTHER", "Other"
+
+    stock = models.ForeignKey(Stock, on_delete=models.CASCADE, related_name="knowledge_documents")
+    title = models.CharField(max_length=500)
+    source_url = models.URLField(max_length=2000, blank=True)
+    source_type = models.CharField(max_length=16, choices=SourceType.choices, default=SourceType.OTHER)
+    content = models.TextField()
+    content_hash = models.CharField(max_length=64)
+    language = models.CharField(max_length=16, default="und")
+    published_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "pickinggeek_knowledge_document"
+        constraints = [
+            models.UniqueConstraint(fields=["stock", "content_hash"], name="knowledge_document_stock_hash"),
+            models.CheckConstraint(condition=models.Q(source_type__in=["NEWS", "REPORT", "FILING", "ANALYSIS", "OTHER"]), name="knowledge_document_source_valid"),
+        ]
+
+    def __str__(self):
+        return self.title
+
+
+class KnowledgeChunk(models.Model):
+    document = models.ForeignKey(KnowledgeDocument, on_delete=models.CASCADE, related_name="chunks")
+    chunk_index = models.PositiveIntegerField()
+    content = models.TextField()
+    embedding = VectorField(dimensions=1024, null=True, blank=True, validators=[MinLengthValidator(1024), MaxLengthValidator(1024)])
+    embedding_model = models.CharField(max_length=160, default="Qwen/Qwen3-Embedding-8B")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "pickinggeek_knowledge_chunk"
+        ordering = ["document_id", "chunk_index"]
+        constraints = [
+            models.UniqueConstraint(fields=["document", "chunk_index"], name="knowledge_chunk_document_index"),
+            models.CheckConstraint(condition=~models.Q(embedding_model=""), name="knowledge_chunk_model_nonempty"),
+        ]
+
+    def __str__(self):
+        return f"{self.document_id}: {self.chunk_index}"
 
 
 class UserStock(models.Model):
