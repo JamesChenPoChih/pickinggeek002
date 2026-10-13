@@ -100,6 +100,8 @@ export interface YahooChartResponse {
   timezone: string;
   previous_close: number | null;
   current_price: number;
+  updated_at?: number | null;
+  market_state?: YahooStockResult['market_state'];
   points: Array<{
     timestamp: number; price: number;
     open?: number | null; high?: number | null; low?: number | null; close?: number | null;

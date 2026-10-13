@@ -9,7 +9,7 @@ import { useLanguage } from '../../i18n';
 import type { ChartRange, StockPosition, YahooChartResponse } from '../../types/stock';
 
 type Point = YahooChartResponse['points'][number];
-const periods: ChartRange[] = ['1M', '6M', '1Y', '3Y', '5Y', 'ALL'];
+const periods: ChartRange[] = ['1D', '1W', '1M', '6M', '1Y', '3Y', '5Y', 'ALL'];
 const number = (value: number | null | undefined) => value == null ? '—' : value.toLocaleString(undefined, { maximumFractionDigits: 4 });
 
 function IndicatorHeading({ title, enabled, onToggle }: { title: string; enabled: boolean; onToggle: () => void }) {
@@ -138,8 +138,8 @@ export default function StockTechnicalView({ stock, token, onBack }: { stock: St
       <div className="min-w-0"><h1 className="truncate text-sm font-bold">{stock.symbol} · {stock.name}</h1><p className="text-[10px] text-slate-500">{zh ? '技術分析 · 日 K' : 'Technical analysis · Daily'} · {data?.currency ?? stock.currency}</p></div>
     </div>
     <div className="px-3 pt-3">
-      <div className="flex items-center justify-between gap-2">
-        <div className="grid flex-1 grid-cols-6 gap-1">{periods.map(period => <button key={period} type="button" aria-pressed={range === period} onClick={() => setRange(period)} className={`h-8 rounded text-[10px] font-semibold ${range === period ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-700'}`}>{period}</button>)}</div>
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="grid w-full grid-cols-8 gap-1">{periods.map(period => <button key={period} type="button" aria-pressed={range === period} onClick={() => setRange(period)} className={`h-8 min-w-0 rounded font-semibold ${range === period ? 'bg-slate-950 text-white' : 'bg-slate-100 text-slate-700'}`}><span className="text-[10px]">{period}</span></button>)}</div>
         <div className="flex shrink-0">{[{ Icon: ZoomIn, name: zh ? '放大 K 線' : 'Zoom in candles', action: () => zoom(0.7) }, { Icon: ZoomOut, name: zh ? '縮小 K 線' : 'Zoom out candles', action: () => zoom(1 / 0.7) }, { Icon: RotateCcw, name: zh ? '重設 K 線' : 'Reset candles', action: () => chart.current?.timeScale().fitContent() }].map(({ Icon, name, action }) => <button key={name} type="button" title={name} aria-label={name} onClick={action} disabled={!data || candlesMissing} className="grid size-8 place-items-center rounded hover:bg-slate-100 disabled:opacity-30"><Icon size={15} /></button>)}</div>
       </div>
       <fieldset className="my-3 flex flex-wrap gap-x-4 gap-y-1" aria-label={zh ? '技術指標' : 'Technical indicators'}>{([{ key: 'macd', label: 'MACD' }, { key: 'bollinger', label: zh ? '布林通道' : 'Bollinger Bands' }, { key: 'squeeze', label: zh ? '擠壓指標' : 'Squeeze' }] as const).map(({ key, label }) => <label key={key} className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-semibold"><input type="checkbox" className="size-4 accent-emerald-600" checked={indicators[key]} onChange={e => setIndicators(v => ({ ...v, [key]: e.target.checked }))} />{label}</label>)}</fieldset>

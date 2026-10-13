@@ -181,9 +181,9 @@ class DailyIndicatorTests(SimpleTestCase):
         self.assertIn('period1', get_mock.call_args.kwargs['params'])
         cache.clear()
 
-    def test_technical_mode_rejects_intraday_ranges(self):
+    def test_technical_mode_rejects_unsupported_ranges(self):
         with self.assertRaises(ValueError):
-            get_price_chart('TEST', 'US', '1D', technical=True)
+            get_price_chart('TEST', 'US', '1H', technical=True)
 
 
 class RenderDeploymentTests(TestCase):

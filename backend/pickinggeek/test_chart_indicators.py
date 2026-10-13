@@ -61,6 +61,27 @@ class ChartIndicatorTests(SimpleTestCase):
                 self.assertLess(current['histogram'], 0)
 
     @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_short_technical_ranges_keep_daily_warmup(self, get):
+        response = MagicMock()
+        values = list(range(100, 400))
+        response.json.return_value = {'chart': {'result': [{
+            'meta': {}, 'timestamp': list(range(1, 301)),
+            'indicators': {'quote': [{'open': values, 'high': [v + 1 for v in values],
+                                     'low': [v - 1 for v in values], 'close': values}]},
+        }]}}
+        get.return_value = response
+        for period, count in [('1D', 1), ('1W', 5)]:
+            cache.clear()
+            points = get_price_chart('SHORT_TEST', 'TW', period, technical=True)['points']
+            self.assertEqual(len(points), count)
+            self.assertEqual(points[-1]['timestamp'], 300)
+            self.assertIsNotNone(points[0]['bb_upper'])
+            self.assertIsNotNone(points[0]['squeeze_momentum'])
+            self.assertIsNotNone(points[0]['ma250'])
+            self.assertEqual(get.call_args.kwargs['params']['interval'], '1d')
+            self.assertIn('period1', get.call_args.kwargs['params'])
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
     def test_yahoo_ohlc_is_preserved_and_missing_values_stay_missing(self, get):
         cache.clear()
         response = MagicMock()

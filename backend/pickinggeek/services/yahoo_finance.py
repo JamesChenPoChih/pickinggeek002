@@ -108,9 +108,7 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
         raise ValueError("Unsupported chart range")
 
     yahoo_symbol = f"{symbol}.TW" if market.upper() == "TW" and not symbol.upper().endswith(('.TW', '.TWO')) else symbol
-    if technical and normalized_range not in {'1M', '6M', 'YTD', '1Y', '3Y', '5Y', 'ALL'}:
-        raise ValueError('Technical charts require a daily range')
-    cache_key = f"yahoo-price-chart:v4:{yahoo_symbol}:{normalized_range}:{technical}"
+    cache_key = f"yahoo-price-chart:v5:{yahoo_symbol}:{normalized_range}:{technical}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -126,10 +124,13 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
                    '1Y': pd.DateOffset(years=1), '3Y': pd.DateOffset(years=3),
                    '5Y': pd.DateOffset(years=5)}
         cutoff = now.normalize().replace(month=1, day=1) if normalized_range == 'YTD' else (
-            now.normalize() - offsets[normalized_range] if normalized_range != 'ALL' else None
+            now.normalize() - offsets[normalized_range] if normalized_range in offsets else None
         )
         params.update({'interval': '1d', 'includePrePost': 'false'})
-        if cutoff is None:
+        if normalized_range in {'1D', '1W'}:
+            params.update({'period1': int((now - pd.Timedelta(days=730)).timestamp()),
+                           'period2': int(now.timestamp())})
+        elif cutoff is None:
             params['range'] = 'max'
         else:
             # Warm up daily averages and EMAs before cropping the visible range.
@@ -179,6 +180,8 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
 
     if technical:
         points = daily_indicator_points(points)
+        if normalized_range in {'1D', '1W'}:
+            points = points[-(1 if normalized_range == '1D' else 5):]
         if cutoff is not None:
             points = [point for point in points if point['timestamp'] >= cutoff.timestamp()]
         if not points:
