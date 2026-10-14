@@ -1,4 +1,5 @@
-import { Bell, Languages } from "lucide-react";
+import { Languages } from "lucide-react";
+import AlertNotifications from './AlertNotifications';
 import { useLanguage } from "../../i18n";
 import type { StockAppSchema } from "../../types/stock";
 
@@ -24,9 +25,7 @@ export default function Header({ user }: HeaderProps) {
         <button type="button" onClick={toggleLanguage} title={t("switchLanguage")} aria-label={t("switchLanguage")} className="relative grid size-9 place-items-center rounded-full text-slate-600 hover:bg-slate-100">
           <Languages size={19} /><span className="absolute -bottom-0.5 right-0 text-[8px] font-bold text-sky-700">{language === "zh" ? "EN" : "中"}</span>
         </button>
-        <button type="button" title={t("notification")} aria-label={t("notification")} className="relative grid size-9 place-items-center rounded-full text-slate-600 hover:bg-slate-100">
-          <Bell size={19} /><i className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" />
-        </button>
+        <AlertNotifications />
       </div>
     </header>
   );

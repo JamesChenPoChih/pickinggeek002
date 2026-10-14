@@ -112,6 +112,15 @@ export async function fetchStocks(token: string): Promise<StockApiResponse[]> {
   return response.json();
 }
 
+export async function alertRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const response = await authorizedFetch(`${API_BASE}/${path}`, localStorage.getItem(ACCESS_KEY) || '', {
+    ...init, headers: { 'Content-Type': 'application/json', ...init.headers },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || `Alert API responded ${response.status}`);
+  return payload as T;
+}
+
 export async function searchYahooStocks(token: string, query: string, signal?: AbortSignal, market: 'US' | 'TW' = 'US'): Promise<YahooStockResult[]> {
   const params = new URLSearchParams({ q: query, market });
   const response = await authorizedFetch(`${API_BASE}/stocks/search/?${params}`, token, { signal });

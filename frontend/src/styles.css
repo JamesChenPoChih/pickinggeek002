@@ -10,6 +10,7 @@ body { margin: 0; min-width: 320px; min-height: 100vh; font-family: var(--font-s
 button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
+.stock-alert-dialog input, .stock-alert-dialog select { font-size: 16px; }
 
 #root > div,
 #root > div > div { height: 100dvh; }

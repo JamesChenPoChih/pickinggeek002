@@ -5,7 +5,7 @@ export type Language = "zh" | "en";
 const messages = {
   zh: {
     notification: "通知", switchLanguage: "切換為英文", proInvestor: "專業投資人", freePlan: "免費方案",
-    index: "首頁", myStock: "自選股", search: "搜尋", me: "我的",
+    index: "首頁", myStock: "自選股", stockPage: "My Stock", aiInvest: "AI Invest", search: "搜尋", me: "我的",
     selectStock: "選擇股票", removeStock: "移除", removingStock: "移除中…", removeStockFailed: "無法移除股票，請稍後再試", keepOneStock: "請至少保留一支股票", priceTrend: "真實價格走勢", closeAndAverages: "Yahoo Finance 行情", price: "價格", chartLabel: "真實價格走勢圖", chartLoading: "正在載入真實行情…", chartUnavailable: "目前無法取得 Yahoo Finance 行情", chartRetry: "重新載入", previousClose: "前收", periodStart: "區間起點", marketData: "市場行情",
     technicalIndicators: "技術指標", liveStatus: "即時狀態", pendingUpdate: "等待每日更新", momentum: "動能指標", macdStatus: "MACD 狀態", histogram: "柱狀圖", movingAverages: "移動平均線", averageSignal: "均線訊號", above: "站上",
     aiAnalysis: "AI 投資分析", technicalCopilot: "技術面 Copilot", analysisMode: "分析模式", quickAnswer: "快速回答", deepReport: "深度報告", analyzing: "正在分析市場資料…", askStock: "詢問這支股票…", sendAnalysis: "送出分析", disclaimer: "AI 內容僅供研究參考，不構成投資建議。", defaultQuestion: "目前技術面適合分批布局嗎？", aiUnavailable: "AI 分析暫時無法使用，請稍後再試。",
@@ -15,7 +15,7 @@ const messages = {
   },
   en: {
     notification: "Notifications", switchLanguage: "Switch to Chinese", proInvestor: "Pro investor", freePlan: "Free plan",
-    index: "Index", myStock: "My Stock", search: "Search", me: "Me",
+    index: "Index", myStock: "My Stock", stockPage: "My Stock", aiInvest: "AI Invest", search: "Search", me: "Me",
     selectStock: "Select stock", removeStock: "Remove", removingStock: "Removing…", removeStockFailed: "Could not remove this stock. Please try again.", keepOneStock: "Keep at least one stock", priceTrend: "Real price trend", closeAndAverages: "Yahoo Finance market data", price: "Price", chartLabel: "real price chart", chartLoading: "Loading real market data…", chartUnavailable: "Yahoo Finance market data is unavailable", chartRetry: "Try again", previousClose: "Previous close", periodStart: "Period start", marketData: "Market data",
     technicalIndicators: "Technical indicators", liveStatus: "Live status", pendingUpdate: "Awaiting daily update", momentum: "Momentum", macdStatus: "MACD status", histogram: "Histogram", movingAverages: "Moving averages", averageSignal: "Moving average signal", above: "Above",
     aiAnalysis: "AI investment analysis", technicalCopilot: "Technical Copilot", analysisMode: "Analysis mode", quickAnswer: "Quick answer", deepReport: "Deep report", analyzing: "Analyzing market data…", askStock: "Ask about this stock…", sendAnalysis: "Send analysis", disclaimer: "AI content is for research only and is not investment advice.", defaultQuestion: "Do the current technical signals support gradual buying?", aiUnavailable: "AI analysis is temporarily unavailable. Please try again.",

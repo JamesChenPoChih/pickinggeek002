@@ -210,6 +210,28 @@ class TechnicalIndicatorCache(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class StockAlert(models.Model):
+    class Frequency(models.TextChoices):
+        ONCE = "ONCE", "Once"
+        DAILY = "DAILY", "Once per market day"
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="stock_alerts")
+    stock = models.ForeignKey(Stock, on_delete=models.CASCADE, related_name="alerts")
+    enabled = models.BooleanField(default=True)
+    rules = models.JSONField(default=list)
+    frequency = models.CharField(max_length=8, choices=Frequency.choices, default=Frequency.ONCE)
+    last_bar_at = models.BigIntegerField(null=True, blank=True)
+    last_notified_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["user", "stock"], name="unique_user_stock_alert"),
+            models.CheckConstraint(condition=models.Q(frequency__in=["ONCE", "DAILY"]), name="stock_alert_frequency_valid"),
+        ]
+
+
 class NotificationQueue(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
     stock = models.ForeignKey(Stock, on_delete=models.CASCADE)
@@ -219,3 +241,4 @@ class NotificationQueue(models.Model):
     is_sent = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     sent_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)

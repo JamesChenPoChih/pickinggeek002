@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, ExternalLink, LoaderCircle, Search, Star, TrendingUp } from "lucide-react";
+import { BellPlus, ChevronRight, ExternalLink, LoaderCircle, Search, Star, TrendingUp } from "lucide-react";
 
 import { addYahooStock, fetchStockChart, fetchStocks, removeTrackedStock, searchYahooStocks, type AuthTokens, type AuthUser } from "./api";
 import { AIAnalysisPanel } from "./components/mobile/AIAnalysisPanel";
@@ -9,6 +9,7 @@ import Header from "./components/mobile/Header";
 import { LoginScreen } from "./components/mobile/LoginScreen";
 import MeView from "./components/mobile/MeView";
 import StockTechnicalView from "./components/mobile/StockTechnicalView";
+import AlertDialog from './components/mobile/AlertDialog';
 import NestedDetails from "./components/mobile/NestedDetails";
 import StockCard from "./components/mobile/StockCard";
 import type { ChartPoint, DetailNode, StockApiResponse, StockAppSchema, StockPosition, YahooChartResponse, YahooStockResult } from "./types/stock";
@@ -84,8 +85,10 @@ const fallbackStocks: StockPosition[] = [
   { id: 3, symbol: "2330", market: "TW", name: "台積電", currency: "TWD", currentPrice: 1045, changePercent: 1.46, indicator: null, chartData: makeChart(1045, 9), nestedDetails: [{ id: "macd", label: "MACD", value: "BULLISH", tone: "positive" }] },
 ];
 
-function IndexView({ stocks, token }: { stocks: StockPosition[]; token: string }) {
+function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: StockPosition[]; token: string; overviewOnly?: boolean }) {
   const [technicalId, setTechnicalId] = useState<number | null>(null);
+  const [alertStockId, setAlertStockId] = useState<number | null>(null);
+  const [alertSaved, setAlertSaved] = useState(false);
   const [quotes, setQuotes] = useState<Record<number, { chart: YahooChartResponse | null; failed: boolean }>>({});
   const onOpen = (stock: StockPosition) => setTechnicalId(stock.id);
   const { t, language } = useLanguage();
@@ -122,22 +125,25 @@ function IndexView({ stocks, token }: { stocks: StockPosition[]; token: string }
   if (technicalStock) return <StockTechnicalView stock={technicalStock} token={token} onBack={() => setTechnicalId(null)} />;
   const changeFor = (quote: YahooChartResponse | null | undefined) => quote?.previous_close && Number.isFinite(quote.previous_close)
     ? (quote.current_price - quote.previous_close) / quote.previous_close * 100 : null;
-  return <div className="px-5 py-5">
-    <div className="mb-5"><p className="text-xs font-semibold text-sky-700">{t("brandName")}</p><h1 className="mt-1 text-2xl font-black text-slate-950">{t("todayMarket")}</h1></div>
+  return <section className={overviewOnly ? "px-5 py-5" : "border-y border-slate-200 py-3"}>
+    {alertStockId !== null && stocks.find(stock => stock.id === alertStockId) && <AlertDialog stock={stocks.find(stock => stock.id === alertStockId)!} onClose={() => setAlertStockId(null)} onSaved={() => { setAlertStockId(null); setAlertSaved(true); }} />}
+    {alertSaved && <p role="status" className="mb-3 text-xs text-emerald-600">{language === 'zh' ? '警示設定已儲存' : 'Alert settings saved'}</p>}
+    {overviewOnly && <><div className="mb-5"><p className="text-xs font-semibold text-sky-700">{t("brandName")}</p><h1 className="mt-1 text-2xl font-black text-slate-950">{t("todayMarket")}</h1></div>
     <div className="grid grid-cols-2 gap-3"><div className="rounded-md bg-slate-950 p-4 text-white"><p className="text-xs text-slate-400">{t("trackedAssets")}</p><strong className="mt-2 block text-3xl">{stocks.length}</strong></div><div className="rounded-md bg-emerald-50 p-4 text-emerald-800"><p className="text-xs text-emerald-600">{t("bullishSignals")}</p><strong className="mt-2 block text-3xl">{stocks.filter(stock => !quotes[stock.id]?.failed && (changeFor(quotes[stock.id]?.chart) ?? -1) >= 0).length}</strong></div></div>
-    <h2 className="mb-2 mt-6 text-sm font-bold text-slate-950">{t("marketSnapshot")}</h2>
+    </>}
+    {!overviewOnly && <><h2 className="mb-2 text-sm font-bold text-slate-950">{t("marketSnapshot")}</h2>
     <div className="divide-y divide-slate-100 border-y border-slate-100">{stocks.map(stock => {
       const state = quotes[stock.id];
       const quote = state?.chart;
       const change = changeFor(quote);
-      return <button key={stock.id} type="button" onClick={() => onOpen(stock)} data-stock-quote={stock.symbol} title={state?.failed ? (language === 'zh' ? '行情暫時無法更新' : 'Quote update unavailable') : undefined} className="flex w-full items-center gap-3 py-4 text-left">
+      return <div key={stock.id} className="flex items-center gap-2"><button type="button" onClick={() => onOpen(stock)} data-stock-quote={stock.symbol} title={state?.failed ? (language === 'zh' ? '行情暫時無法更新' : 'Quote update unavailable') : undefined} className="flex min-w-0 flex-1 items-center gap-3 py-4 text-left">
         <span className="min-w-0 flex-1"><strong className="block text-[16px] text-slate-900">{stock.symbol}</strong><span className="block break-words text-[11px] text-slate-400">{stock.name}</span></span>
         <span className="shrink-0 text-right"><strong className="flex items-baseline justify-end gap-1 text-[12px] text-slate-900"><span>{quote ? quote.current_price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'}</span><span data-quote-currency className="text-[6px] font-normal text-slate-400">{quote?.currency ?? stock.currency}</span></strong>
           <span className={`block text-[12px] font-bold ${change == null ? 'text-slate-400' : change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{change == null ? '--' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}</span>
-        </span><ChevronRight size={16} className="shrink-0 text-slate-300" />
-      </button>;
-    })}</div>
-  </div>;
+        </span>
+      </button><button type="button" onClick={() => { setAlertSaved(false); setAlertStockId(stock.id); }} aria-label={`Set Alert ${stock.symbol}`} title={`Set Alert ${stock.symbol}`} className="grid size-11 shrink-0 place-items-center rounded text-slate-900 hover:bg-slate-100"><BellPlus size={18} /></button></div>;
+    })}</div></>}
+  </section>;
 }
 
 function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: StockPosition[]; onOpen: (stock: StockPosition) => void; onAdd: (stock: StockApiResponse) => void }) {
@@ -394,10 +400,10 @@ export default function App() {
                 </div>
                 <NestedDetails nodes={selected.nestedDetails} />
               </section>
-              <AIAnalysisPanel stock={selected} token={token} />
+              <MarketSnapshot stocks={stocks} token={token} />
             </div>
           )}
-          {activeTab === "index" && <IndexView stocks={stocks} token={token} />}
+          {activeTab === "index" && <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><AIAnalysisPanel stock={selected} token={token} /></>}
           {activeTab === "search" && <SearchView token={token} stocks={stocks} onOpen={openStock} onAdd={addStock} />}
           {activeTab === "me" && <MeView user={schema.user} onLogout={logout} />}
         </main>

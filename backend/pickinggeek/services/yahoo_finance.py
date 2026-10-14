@@ -65,7 +65,7 @@ def daily_indicator_points(points: list[dict]) -> list[dict]:
         return []
     frame = pd.DataFrame(points).sort_values('timestamp').drop_duplicates('timestamp').reset_index(drop=True)
     close = frame['price']
-    for days in (60, 100, 200, 250):
+    for days in (5, 10, 20, 60, 100, 200, 250):
         frame[f'ma{days}'] = close.rolling(days, min_periods=days).mean()
     macd = close.ewm(span=12, adjust=False).mean() - close.ewm(span=26, adjust=False).mean()
     signal = macd.ewm(span=9, adjust=False).mean()
@@ -108,7 +108,7 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
         raise ValueError("Unsupported chart range")
 
     yahoo_symbol = f"{symbol}.TW" if market.upper() == "TW" and not symbol.upper().endswith(('.TW', '.TWO')) else symbol
-    cache_key = f"yahoo-price-chart:v6:{yahoo_symbol}:{normalized_range}:{technical}"
+    cache_key = f"yahoo-price-chart:v7:{yahoo_symbol}:{normalized_range}:{technical}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -170,7 +170,7 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
         if close is None or not isfinite(float(close)):
             continue
         point = {"timestamp": timestamp, "price": float(close), "close": float(close)}
-        for key in ('open', 'high', 'low'):
+        for key in ('open', 'high', 'low', 'volume'):
             values = quote.get(key, [])
             value = values[index] if index < len(values) else None
             point[key] = float(value) if value is not None and isfinite(float(value)) else None

@@ -1,10 +1,17 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import KnowledgeChunk, KnowledgeDocument, NotificationQueue, PopularStock, Stock, StockKnowledgeState, TechnicalIndicatorCache, User, UserStock
+from .models import KnowledgeChunk, KnowledgeDocument, NotificationQueue, PopularStock, Stock, StockAlert, StockKnowledgeState, TechnicalIndicatorCache, User, UserStock
 
 admin.site.register(User, UserAdmin)
 admin.site.register([Stock, UserStock, TechnicalIndicatorCache, NotificationQueue])
+
+
+@admin.register(StockAlert)
+class StockAlertAdmin(admin.ModelAdmin):
+    list_display = ['user', 'stock', 'enabled', 'frequency', 'last_notified_date']
+    list_filter = ['enabled', 'frequency', 'stock__market']
+    readonly_fields = ['rules', 'last_bar_at', 'last_notified_date', 'created_at', 'updated_at']
 
 
 @admin.register(PopularStock)

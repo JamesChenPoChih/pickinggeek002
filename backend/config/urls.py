@@ -6,6 +6,7 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from config.views import health_check, pwa_asset, service_status
 from pickinggeek import billing
+from pickinggeek import alert_api
 from pickinggeek.api import (
     StockViewSet,
     UserStockViewSet,
@@ -29,6 +30,8 @@ admin.site.site_title = "Picking Geek Admin"
 admin.site.index_title = "Picking Geek Management"
 
 urlpatterns = [
+    path("api/stocks/<int:stock_id>/alert/", alert_api.stock_alert),
+    path("api/notifications/", alert_api.notifications),
     path("sw.js", pwa_asset, {"name": "sw.js"}),
     path("manifest.webmanifest", pwa_asset, {"name": "manifest.webmanifest"}),
     path("offline.html", pwa_asset, {"name": "offline.html"}),

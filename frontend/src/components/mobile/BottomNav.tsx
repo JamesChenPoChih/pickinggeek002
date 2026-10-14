@@ -1,12 +1,12 @@
-import { ChartNoAxesCombined, Home, Search, UserRound } from "lucide-react";
+import { Bot, ChartNoAxesCombined, Search, UserRound } from "lucide-react";
 import { useLanguage, type MessageKey } from "../../i18n";
 
 export type TabId = "index" | "stocks" | "search" | "me";
 interface BottomNavProps { active: TabId; onChange: (tab: TabId) => void }
 
 const tabs = [
-  { id: "stocks" as const, label: "index" as MessageKey, icon: Home },
-  { id: "index" as const, label: "myStock" as MessageKey, icon: ChartNoAxesCombined },
+  { id: "stocks" as const, label: "stockPage" as MessageKey, icon: ChartNoAxesCombined },
+  { id: "index" as const, label: "aiInvest" as MessageKey, icon: Bot },
   { id: "search" as const, label: "search" as MessageKey, icon: Search },
   { id: "me" as const, label: "me" as MessageKey, icon: UserRound },
 ];
