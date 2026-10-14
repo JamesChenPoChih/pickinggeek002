@@ -1,6 +1,8 @@
 import json
 import os
 import secrets
+import logging
+from concurrent.futures import ThreadPoolExecutor
 from decimal import Decimal, InvalidOperation
 
 from django.core.exceptions import ValidationError
@@ -12,16 +14,22 @@ from django.utils import timezone
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from rest_framework import status, viewsets
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
+from rest_framework.decorators import api_view, authentication_classes, permission_classes, throttle_classes
+from rest_framework.throttling import UserRateThrottle
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import NotificationQueue, Stock, TechnicalIndicatorCache, User, UserStock
 from .serializers import IndicatorSerializer, StockSerializer, UserStockSerializer
-from .services.llm_router import LLMRouter
+from .services.llm_router import LLMRouter, ReportFormatError, REPORT_KEYS, QUICK_REPORT_KEYS
+from .services.analysis_context import build_analysis_context, validate_peers
+from .services.bullish import stock_assessment
 from .services.native_names import native_stock_name
+from .services.translation import translate_report, TranslationNotConfigured
 from .services.yahoo_finance import YahooFinanceError, enrich_market_assets, get_market_asset, get_price_chart, search_market_assets
+
+logger = logging.getLogger(__name__)
 
 
 @api_view(["GET"])
@@ -222,28 +230,93 @@ def indicator_detail(request, stock_id):
     return Response(IndicatorSerializer(indicator).data)
 
 
+class AnalysisThrottle(UserRateThrottle):
+    scope = 'ai_analysis'
+    rate = '6/min'
+
+
+@api_view(['POST'])
+@throttle_classes([AnalysisThrottle])
+def translate_analysis(request):
+    if not isinstance(request.data, dict) or not isinstance(request.data.get('language'), str) or request.data['language'] not in {'zh', 'en'}:
+        return Response({'detail': 'Invalid translation language'}, status=400)
+    report = request.data.get('report')
+    if not isinstance(report, dict) or set(report) not in (set(REPORT_KEYS), set(QUICK_REPORT_KEYS)):
+        return Response({'detail': 'Invalid analysis report'}, status=400)
+    if any(not isinstance(value, str) or not value.strip() for value in report.values()) or sum(len(value) for value in report.values()) > 30000:
+        return Response({'detail': 'Invalid or oversized analysis report'}, status=400)
+    try:
+        translated = translate_report(report, request.data['language'], request.user.pk)
+        return Response({'language': request.data['language'], 'sections': translated, 'provider': 'google'})
+    except TranslationNotConfigured:
+        return Response({'detail': '請先設定 GOOGLE_TRANSLATE_API_KEY，Google 翻譯尚未啟用。' if request.data['language'] == 'zh'
+                         else 'Set GOOGLE_TRANSLATE_API_KEY to enable Google translation.'}, status=503)
+    except Exception as exc:
+        logger.warning('AI translation failed: %s status=%s reason=%s', type(exc).__name__,
+                       getattr(exc, 'status_code', None), str(exc) if isinstance(exc, ReportFormatError) else 'provider_error')
+        return Response({'detail': '翻譯暫時無法完成，原文已保留。' if request.data['language'] == 'zh' else 'Translation unavailable; the original analysis is preserved.'}, status=502)
+
+
+@api_view(['GET'])
+def bullish_summary(request):
+    stocks = list(Stock.objects.filter(followers__user=request.user, is_active=True).distinct())
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = list(executor.map(stock_assessment, stocks))
+    return Response({'count': sum(item['status'] == 'bullish' for item in results),
+                     'stocks': results, 'updated_at': timezone.now().isoformat()})
+
+
 @api_view(["POST"])
+@throttle_classes([AnalysisThrottle])
 def ai_analyze(request):
+    if not isinstance(request.data, dict):
+        return Response({'detail': 'Invalid request'}, status=400)
     question = str(request.data.get("question", "")).strip()
     mode = str(request.data.get("mode", "auto"))
     stock_id = request.data.get("stock_id")
-    if not question:
+    if not question or len(question) > 2000 or mode not in {'auto', 'quick', 'deep'}:
         return Response({"detail": "question 不可為空"}, status=status.HTTP_400_BAD_REQUEST)
+    if isinstance(stock_id, bool) or not isinstance(stock_id, int) or stock_id <= 0:
+        return Response({'detail': 'Invalid stock_id'}, status=400)
     stock = get_object_or_404(Stock.objects.select_related("indicator"), pk=stock_id)
-    context = StockSerializer(stock).data
+    if not UserStock.objects.filter(user=request.user, stock=stock).exists():
+        return Response({'detail': 'Please add this stock to your watchlist first.'}, status=403)
+    try:
+        peers = validate_peers(request.data.get('comparisons', []), stock.symbol, stock.market)
+    except ValueError as exc:
+        return Response({'detail': str(exc)}, status=400)
+    language = 'en' if request.data.get('language') == 'en' else 'zh'
 
     def event_stream():
         try:
-            for event in LLMRouter().stream(question, context, mode):
+            router = LLMRouter()
+            selected_mode = router.choose_model(question, mode).mode
+            context = build_analysis_context(stock, selected_mode, peers)
+            context['language'] = language
+            yield f"data: {json.dumps({'type': 'context', 'data': context}, ensure_ascii=False)}\n\n"
+            for event in router.stream(question, context, selected_mode):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception:
-            error = {"type": "error", "message": "AI 服務目前無法完成請求，請稍後再試。"}
+        except Exception as exc:
+            logger.warning('AI analysis failed: %s status=%s', type(exc).__name__, getattr(exc, 'status_code', None))
+            code = 'service_error'
+            message = 'AI 服務目前無法完成請求，請稍後再試。' if language == 'zh' else 'AI analysis is unavailable. Please try again.'
+            if isinstance(exc, ReportFormatError):
+                code = str(exc)
+                message = '模型回傳的分析格式不完整，請重新分析。' if language == 'zh' else 'The model returned an incomplete report. Please retry.'
+                if code == 'truncated_report':
+                    message = '報告生成被長度限制截斷，請縮短問題後重新分析。' if language == 'zh' else 'The report reached its output limit. Shorten the question and retry.'
+                logger.warning('AI report validation failed: %s', code)
+            elif type(exc).__name__ == 'APITimeoutError':
+                code = 'timeout'
+                message = '分析服務回應逾時，請重新分析。' if language == 'zh' else 'Analysis timed out. Please retry.'
+            error = {"type": "error", "message": message, 'code': code}
             yield f"data: {json.dumps(error, ensure_ascii=False)}\n\n"
         yield "data: {\"type\": \"done\"}\n\n"
 
     response = StreamingHttpResponse(event_stream(), content_type="text/event-stream")
     response["Cache-Control"] = "no-cache"
     response["X-Accel-Buffering"] = "no"
+    response['X-Analysis-Format'] = 'json-schema-v2'
     return response
 
 

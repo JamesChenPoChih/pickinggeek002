@@ -35,7 +35,36 @@ export async function billingRequest<T>(path = "", body?: object): Promise<T> {
   return payload as T;
 }
 export type AnalysisMode = "auto" | "quick" | "deep";
+export interface AnalysisPeer { symbol: string; market: 'US' | 'TW'; role: 'industry' | 'peer' }
+export interface AnalysisAsset {
+  symbol: string; market: string; role: string; status: string; as_of?: string; close?: number; currency?: string;
+  missing?: string[];
+  news?: { status: string; window_days: number; items: { title: string; url: string; publisher: string; published_at: string }[] };
+}
+export interface AnalysisContext { target: AnalysisAsset; comparisons: AnalysisAsset[]; mode: string }
+export interface DetailedReport { summary: string; ma: string; macd: string; bollinger: string; squeeze: string; strategy: string; news: string }
+export type QuickReport = Pick<DetailedReport, 'summary' | 'ma' | 'macd' | 'bollinger' | 'squeeze'>;
+export async function translateAnalysis(token: string, report: QuickReport | DetailedReport, language: 'zh' | 'en', signal?: AbortSignal): Promise<QuickReport | DetailedReport> {
+  const response = await authorizedFetch(`${API_BASE}/ai/translate/`, token, { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ report, language }) });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.detail || 'Translation unavailable');
+  if (!payload.sections || Object.keys(report).some(key => typeof payload.sections[key] !== 'string' || !payload.sections[key].trim())) throw new Error('Incomplete translation');
+  return payload.sections;
+}
+export interface BullishSummary {
+  count: number; updated_at: string;
+  stocks: { id: number; symbol: string; name: string; market: string; as_of: string | null; status: 'bullish' | 'neutral' | 'unavailable'; score: number | null; signals: Record<string, boolean> }[];
+}
+export async function fetchBullishSummary(token: string, signal?: AbortSignal): Promise<BullishSummary> {
+  const response = await authorizedFetch(`${API_BASE}/stocks/bullish-summary/`, token, { signal });
+  if (!response.ok) throw new Error('Bullish summary unavailable');
+  const payload = await response.json() as BullishSummary;
+  if (!Array.isArray(payload.stocks) || !Number.isInteger(payload.count)) throw new Error('Invalid bullish summary');
+  return payload;
+}
 export type StreamEvent =
+  | { type: 'report'; sections: QuickReport | DetailedReport }
+  | { type: "context"; data: AnalysisContext }
   | { type: "meta"; model: string; mode: AnalysisMode }
   | { type: "token"; content: string }
   | { type: "error"; message: string }
@@ -162,20 +191,28 @@ export async function streamAnalysis(options: {
   stockId: number;
   question: string;
   mode: AnalysisMode;
+  comparisons?: AnalysisPeer[];
+  language?: 'zh' | 'en';
+  signal?: AbortSignal;
   onEvent: (event: StreamEvent) => void;
 }): Promise<void> {
   const response = await authorizedFetch(`${API_BASE}/ai/analyze/`, options.token, {
     method: "POST",
+    signal: options.signal,
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ stock_id: options.stockId, question: options.question, mode: options.mode }),
+    body: JSON.stringify({ stock_id: options.stockId, question: options.question, mode: options.mode, comparisons: options.comparisons ?? [], language: options.language }),
   });
-  if (!response.ok) throw new Error(`AI API 回應 ${response.status}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.detail || `AI API 回應 ${response.status}`);
+  }
   if (!response.body) throw new Error("瀏覽器不支援串流回應");
 
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
-  while (true) {
+  try {
+    while (true) {
     const { done, value } = await reader.read();
     if (done) break;
     buffer += decoder.decode(value, { stream: true });
@@ -185,5 +222,9 @@ export async function streamAnalysis(options: {
       const line = packet.split("\n").find((item) => item.startsWith("data: "));
       if (line) options.onEvent(JSON.parse(line.slice(6)) as StreamEvent);
     }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
   }
 }

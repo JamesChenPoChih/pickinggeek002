@@ -48,14 +48,14 @@ interface MeViewProps { user: StockAppSchema["user"]; onLogout: () => void }
 function SettingRow({ icon: Icon, label, value, danger = false, onClick }: { icon: LucideIcon; label: string; value?: string; danger?: boolean; onClick: () => void }) {
   return <button type="button" onClick={onClick} className="flex min-h-12 w-full items-center gap-3 px-5 py-3 text-left transition hover:bg-slate-50">
     <Icon size={17} className={danger ? "text-rose-600" : "text-slate-500"} />
-    <span className={`min-w-0 flex-1 text-sm font-medium ${danger ? "text-rose-700" : "text-slate-800"}`}>{label}</span>
+    <span className={`min-w-0 flex-1 text-sm font-medium ${danger ? "text-rose-700" : "me-setting-label"}`}>{label}</span>
     {value && <span className="max-w-28 truncate text-[10px] text-slate-400">{value}</span>}
     <ChevronRight size={15} className="shrink-0 text-slate-300" />
   </button>;
 }
 
 function SettingsSection({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="mt-6"><h2 className="mb-2 px-5 text-[11px] font-bold uppercase text-slate-400">{title}</h2><div className="divide-y divide-slate-100 border-y border-slate-100 bg-white">{children}</div></section>;
+  return <section className="me-settings-section mt-6"><h2 className="me-section-title mb-2 px-5 text-[13px] font-bold uppercase">{title}</h2><div className="me-section-rows bg-white">{children}</div></section>;
 }
 
 function DetailPage({ title, back, children }: { title: string; back: () => void; children: React.ReactNode }) {

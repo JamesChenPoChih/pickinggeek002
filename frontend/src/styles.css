@@ -11,9 +11,19 @@ button, input, textarea, select { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: default; }
 .stock-alert-dialog input, .stock-alert-dialog select { font-size: 16px; }
+.ai-report-divider { border-color: #ededed; }
+html[data-theme="dark"] .ai-report-divider { border-color: rgba(245, 245, 245, 0.14); }
 .stock-snapshot-list { border-block: 1px solid #ededed; }
 .stock-snapshot-list > * + *,
 .stock-search-list > * + * { border-top: 1px solid #ededed; }
+.me-section-title { color: #171717; }
+.me-setting-label { color: #737373; }
+.me-section-rows { border-block: 1px solid #737373; }
+.me-section-rows > * + * { border-top: 1px solid #ededed; }
+html[data-theme="dark"] .me-section-title { color: #ffffff; }
+html[data-theme="dark"] .me-setting-label { color: #c5c5c5; }
+html[data-theme="dark"] .me-section-rows { border-color: #ffffff; }
+html[data-theme="dark"] .me-section-rows > * + * { border-color: rgba(245, 245, 245, 0.14); }
 html[data-theme="dark"] .stock-snapshot-list,
 html[data-theme="dark"] .stock-snapshot-list > * + *,
 html[data-theme="dark"] .stock-search-list > * + * { border-color: rgba(245, 245, 245, 0.14); }

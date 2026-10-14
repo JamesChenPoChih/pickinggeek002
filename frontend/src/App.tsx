@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { BellPlus, ChevronRight, ExternalLink, LoaderCircle, Search, Star, TrendingUp } from "lucide-react";
 
 import { addYahooStock, fetchStockChart, fetchStocks, removeTrackedStock, searchYahooStocks, type AuthTokens, type AuthUser } from "./api";
-import { AIAnalysisPanel } from "./components/mobile/AIAnalysisPanel";
+import { AIAnalysisPanel, type AnalysisRecord } from "./components/mobile/AIAnalysisPanel";
+import type { HistorySelection } from './components/mobile/TodayAnalysis';
+import BullishSignals from './components/mobile/BullishSignals';
 import BottomNav, { type TabId } from "./components/mobile/BottomNav";
 import ChartSection from "./components/mobile/ChartSection";
 import Header from "./components/mobile/Header";
@@ -93,7 +95,7 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
   const onOpen = (stock: StockPosition) => setTechnicalId(stock.id);
   const { t, language } = useLanguage();
   useEffect(() => {
-    if (!token || technicalId !== null) return;
+    if (!token || technicalId !== null || overviewOnly) return;
     const controller = new AbortController();
     let inFlight = false;
     const refresh = async () => {
@@ -120,7 +122,7 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
     const onVisible = () => { if (document.visibilityState === 'visible') void refresh(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => { controller.abort(); window.clearInterval(timer); document.removeEventListener('visibilitychange', onVisible); };
-  }, [stocks, token, technicalId]);
+  }, [stocks, token, technicalId, overviewOnly]);
   const technicalStock = stocks.find(stock => stock.id === technicalId);
   if (technicalStock) return <StockTechnicalView stock={technicalStock} token={token} onBack={() => setTechnicalId(null)} />;
   const changeFor = (quote: YahooChartResponse | null | undefined) => quote?.previous_close && Number.isFinite(quote.previous_close)
@@ -129,7 +131,7 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
     {alertStockId !== null && stocks.find(stock => stock.id === alertStockId) && <AlertDialog stock={stocks.find(stock => stock.id === alertStockId)!} onClose={() => setAlertStockId(null)} onSaved={() => { setAlertStockId(null); setAlertSaved(true); }} />}
     {alertSaved && <p role="status" className="mb-3 text-xs text-emerald-600">{language === 'zh' ? '警示設定已儲存' : 'Alert settings saved'}</p>}
     {overviewOnly && <><div className="mb-5"><p className="text-xs font-semibold text-sky-700">{t("brandName")}</p><h1 className="mt-1 text-2xl font-black text-slate-950">{t("todayMarket")}</h1></div>
-    <div className="grid grid-cols-2 gap-3"><div className="rounded-md bg-slate-950 p-4 text-white"><p className="text-xs text-slate-400">{t("trackedAssets")}</p><strong className="mt-2 block text-3xl">{stocks.length}</strong></div><div className="rounded-md bg-emerald-50 p-4 text-emerald-800"><p className="text-xs text-emerald-600">{t("bullishSignals")}</p><strong className="mt-2 block text-3xl">{stocks.filter(stock => !quotes[stock.id]?.failed && (changeFor(quotes[stock.id]?.chart) ?? -1) >= 0).length}</strong></div></div>
+    <div className="grid grid-cols-2 gap-3"><div className="rounded-md bg-slate-950 p-4 text-white"><p className="text-xs text-slate-400">{t("trackedAssets")}</p><strong className="mt-2 block text-3xl">{stocks.length}</strong></div><BullishSignals token={token} stockKey={stocks.map(stock => stock.id).join(',')} /></div>
     </>}
     {!overviewOnly && <><h2 className="mb-2 text-sm font-bold text-slate-950">{t("marketSnapshot")}</h2>
     <div className="stock-snapshot-list">{stocks.map(stock => {
@@ -267,8 +269,11 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
 }
 
 export default function App() {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [token, setToken] = useState(() => localStorage.getItem(ACCESS_KEY) ?? "");
+  const analysisHistory = useRef<Record<string, AnalysisRecord[]>>({});
+  const [analysisSelection, setAnalysisSelection] = useState<HistorySelection | null>(null);
+  useEffect(() => { setAnalysisSelection(null); }, [language]);
   const [stocks, setStocks] = useState<StockPosition[]>(fallbackStocks);
   const [selectedId, setSelectedId] = useState(fallbackStocks[0].id);
   const [activeTab, setActiveTab] = useState<TabId>(() => new URLSearchParams(window.location.search).has("billing") ? "me" : "stocks");
@@ -286,6 +291,8 @@ export default function App() {
 
   useEffect(() => {
     const handleExpiredSession = () => {
+      analysisHistory.current = {};
+      setAnalysisSelection(null);
       localStorage.removeItem(USER_KEY);
       setAuthUser(null);
       setToken("");
@@ -343,6 +350,8 @@ export default function App() {
   };
 
   function handleLogin(tokens: AuthTokens) {
+    analysisHistory.current = {};
+    setAnalysisSelection(null);
     localStorage.setItem(ACCESS_KEY, tokens.access);
     localStorage.setItem(REFRESH_KEY, tokens.refresh);
     if (tokens.user) {
@@ -355,6 +364,8 @@ export default function App() {
     setToken(tokens.access);
   }
   function logout() {
+    analysisHistory.current = {};
+    setAnalysisSelection(null);
     localStorage.removeItem(ACCESS_KEY);
     localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
@@ -403,7 +414,7 @@ export default function App() {
               <MarketSnapshot stocks={stocks} token={token} />
             </div>
           )}
-          {activeTab === "index" && <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><AIAnalysisPanel stock={selected} token={token} /></>}
+          {activeTab === "index" && <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><div className="px-5 pb-4"><select aria-label={t('selectStock')} value={selected.id} onChange={event => setSelectedId(Number(event.target.value))} className="h-11 w-full rounded border border-slate-300 bg-white px-3 text-base text-slate-900">{stocks.map(stock => <option key={stock.id} value={stock.id}>{stock.symbol} · {stock.name}</option>)}</select></div><AIAnalysisPanel stock={selected} token={token} historyStore={analysisHistory} selection={analysisSelection} onSelectHistory={item => { setSelectedId(Number(item.key.split(':')[0])); setAnalysisSelection(item); }} /></>}
           {activeTab === "search" && <SearchView token={token} stocks={stocks} onOpen={openStock} onAdd={addStock} />}
           {activeTab === "me" && <MeView user={schema.user} onLogout={logout} />}
         </main>
