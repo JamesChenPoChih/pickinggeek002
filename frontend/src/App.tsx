@@ -132,7 +132,7 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
     <div className="grid grid-cols-2 gap-3"><div className="rounded-md bg-slate-950 p-4 text-white"><p className="text-xs text-slate-400">{t("trackedAssets")}</p><strong className="mt-2 block text-3xl">{stocks.length}</strong></div><div className="rounded-md bg-emerald-50 p-4 text-emerald-800"><p className="text-xs text-emerald-600">{t("bullishSignals")}</p><strong className="mt-2 block text-3xl">{stocks.filter(stock => !quotes[stock.id]?.failed && (changeFor(quotes[stock.id]?.chart) ?? -1) >= 0).length}</strong></div></div>
     </>}
     {!overviewOnly && <><h2 className="mb-2 text-sm font-bold text-slate-950">{t("marketSnapshot")}</h2>
-    <div className="divide-y divide-slate-100 border-y border-slate-100">{stocks.map(stock => {
+    <div className="stock-snapshot-list">{stocks.map(stock => {
       const state = quotes[stock.id];
       const quote = state?.chart;
       const change = changeFor(quote);
@@ -238,7 +238,7 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
       {error && <p className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{t("searchFailed")}</p>}
       {addError && <p className="mt-4 rounded-md bg-rose-50 px-3 py-2 text-xs text-rose-700">{addError}</p>}
       {!loading && !error && query.trim() && !results.length && <p className="mt-4 text-sm text-slate-400">{t("noSearchResults")}</p>}
-      <div className="mt-4 divide-y divide-slate-100">
+      <div className="stock-search-list mt-4">
         {visibleResults.map((result) => {
           const localStock = stocks.find((stock) => stock.market === (result.market ?? market) && stock.symbol.toUpperCase().replace(/\.TW$/, '') === result.symbol.replace(/\.TW$/, ''));
           const isAdding = addingSymbol === result.symbol;

@@ -7,7 +7,11 @@ import { registerPwa } from './pwa';
 
 registerPwa();
 
-document.documentElement.dataset.theme = localStorage.getItem("pickinggeek_theme") || "system";
+const savedTheme = localStorage.getItem("pickinggeek_theme");
+const theme = savedTheme === "dark" || savedTheme === "light" ? savedTheme
+  : savedTheme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+localStorage.setItem("pickinggeek_theme", theme);
+document.documentElement.dataset.theme = theme;
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode><LanguageProvider><App /></LanguageProvider></React.StrictMode>,
