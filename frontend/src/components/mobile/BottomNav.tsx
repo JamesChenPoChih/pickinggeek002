@@ -16,7 +16,7 @@ export default function BottomNav({ active, onChange }: BottomNavProps) {
   function switchTab(id: TabId) {
     if (id === active) return;
     try {
-      if (typeof navigator.vibrate === 'function') navigator.vibrate(15);
+      if (typeof navigator.vibrate === 'function') navigator.vibrate(40);
     } catch {
       // Haptic feedback must never prevent navigation.
     }
