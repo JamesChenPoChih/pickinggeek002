@@ -61,25 +61,25 @@ class ChartIndicatorTests(SimpleTestCase):
                 self.assertLess(current['histogram'], 0)
 
     @patch('pickinggeek.services.yahoo_finance.httpx.get')
-    def test_short_technical_ranges_keep_daily_warmup(self, get):
+    def test_short_technical_ranges_keep_intraday_warmup(self, get):
         response = MagicMock()
-        values = list(range(100, 400))
+        values = list(range(100, 500))
+        timestamps = [1700000000 + day * 86400 + bar * 300 for day in range(10) for bar in range(40)]
         response.json.return_value = {'chart': {'result': [{
-            'meta': {}, 'timestamp': list(range(1, 301)),
+            'meta': {'exchangeTimezoneName': 'Asia/Taipei'}, 'timestamp': timestamps,
             'indicators': {'quote': [{'open': values, 'high': [v + 1 for v in values],
                                      'low': [v - 1 for v in values], 'close': values}]},
         }]}}
         get.return_value = response
-        for period, count in [('1D', 1), ('1W', 5)]:
+        for period, count, interval in [('1D', 40, '5m'), ('1W', 200, '30m')]:
             cache.clear()
             points = get_price_chart('SHORT_TEST', 'TW', period, technical=True)['points']
             self.assertEqual(len(points), count)
-            self.assertEqual(points[-1]['timestamp'], 300)
+            self.assertEqual(points[-1]['timestamp'], timestamps[-1])
             self.assertIsNotNone(points[0]['bb_upper'])
             self.assertIsNotNone(points[0]['squeeze_momentum'])
-            self.assertIsNotNone(points[0]['ma250'])
-            self.assertEqual(get.call_args.kwargs['params']['interval'], '1d')
-            self.assertIn('period1', get.call_args.kwargs['params'])
+            self.assertEqual(get.call_args.kwargs['params']['interval'], interval)
+            self.assertEqual(get.call_args.kwargs['params']['range'], '1mo' if period == '1D' else '60d')
 
     @patch('pickinggeek.services.yahoo_finance.httpx.get')
     def test_yahoo_ohlc_is_preserved_and_missing_values_stay_missing(self, get):

@@ -108,7 +108,7 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
         raise ValueError("Unsupported chart range")
 
     yahoo_symbol = f"{symbol}.TW" if market.upper() == "TW" and not symbol.upper().endswith(('.TW', '.TWO')) else symbol
-    cache_key = f"yahoo-price-chart:v5:{yahoo_symbol}:{normalized_range}:{technical}"
+    cache_key = f"yahoo-price-chart:v6:{yahoo_symbol}:{normalized_range}:{technical}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -128,8 +128,8 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
         )
         params.update({'interval': '1d', 'includePrePost': 'false'})
         if normalized_range in {'1D', '1W'}:
-            params.update({'period1': int((now - pd.Timedelta(days=730)).timestamp()),
-                           'period2': int(now.timestamp())})
+            params.update({'range': '1mo' if normalized_range == '1D' else '60d',
+                           'interval': '5m' if normalized_range == '1D' else '30m'})
         elif cutoff is None:
             params['range'] = 'max'
         else:
@@ -181,7 +181,10 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
     if technical:
         points = daily_indicator_points(points)
         if normalized_range in {'1D', '1W'}:
-            points = points[-(1 if normalized_range == '1D' else 5):]
+            dates = [pd.Timestamp(point['timestamp'], unit='s', tz='UTC').tz_convert(
+                meta.get('exchangeTimezoneName', 'America/New_York')).date() for point in points]
+            visible_dates = set(sorted(set(dates))[-(1 if normalized_range == '1D' else 5):])
+            points = [point for point, date in zip(points, dates) if date in visible_dates]
         if cutoff is not None:
             points = [point for point in points if point['timestamp'] >= cutoff.timestamp()]
         if not points:
@@ -190,6 +193,7 @@ def get_price_chart(symbol: str, market: str, range_key: str, technical: bool = 
     payload = {
         "symbol": symbol,
         "range": normalized_range,
+        "interval": params['interval'],
         "currency": meta.get("currency", "USD"),
         "timezone": meta.get("exchangeTimezoneName", "America/New_York"),
         "previous_close": points[0]['price'] if technical else meta.get("chartPreviousClose") or meta.get("previousClose"),

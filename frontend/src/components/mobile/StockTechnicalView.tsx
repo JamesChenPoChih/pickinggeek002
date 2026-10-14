@@ -54,7 +54,7 @@ export default function StockTechnicalView({ stock, token, onBack }: { stock: St
       autoSize: true,
       layout: { fontSize: 10, attributionLogo: true, panes: { enableResize: false } },
       rightPriceScale: { minimumWidth: 65 },
-      timeScale: { timeVisible: false, borderVisible: false },
+      timeScale: { timeVisible: data.interval === '5m' || data.interval === '30m', borderVisible: false },
       localization: { locale: zh ? 'zh-TW' : 'en-US' },
       handleScroll: { mouseWheel: true, pressedMouseMove: true, horzTouchDrag: true, vertTouchDrag: false },
       handleScale: { mouseWheel: true, pinch: true, axisPressedMouseMove: true },
@@ -82,7 +82,7 @@ export default function StockTechnicalView({ stock, token, onBack }: { stock: St
       ? [{ time: time(p), open: p.open, high: p.high, low: p.low, close: p.close }] : [{ time: time(p) }]));
     const line = (key: keyof Point, color: string, pane = 0, title = '', dashed = false) => {
       const series = api.addSeries(LineSeries, { color, lineWidth: 1, lineStyle: dashed ? 2 : 0, title,
-        lastValueVisible: false, priceLineVisible: false }, pane);
+        lastValueVisible: false, priceLineVisible: false, pointMarkersVisible: points.length < 6 }, pane);
       series.setData(points.map(p => typeof p[key] === 'number' ? { time: time(p), value: p[key] as number } : { time: time(p) }));
     };
     if (indicators.bollinger) {
@@ -135,7 +135,7 @@ export default function StockTechnicalView({ stock, token, onBack }: { stock: St
   return <div className="pb-5 text-slate-900">
     <div className="flex min-h-14 items-center gap-2 border-b border-slate-200 px-3">
       <button type="button" onClick={onBack} title={zh ? '返回 My Stock' : 'Back to My Stock'} aria-label={zh ? '返回 My Stock' : 'Back to My Stock'} className="grid size-10 shrink-0 place-items-center rounded hover:bg-slate-100"><ArrowLeft size={18} /></button>
-      <div className="min-w-0"><h1 className="truncate text-sm font-bold">{stock.symbol} · {stock.name}</h1><p className="text-[10px] text-slate-500">{zh ? '技術分析 · 日 K' : 'Technical analysis · Daily'} · {data?.currency ?? stock.currency}</p></div>
+      <div className="min-w-0"><h1 className="truncate text-sm font-bold">{stock.symbol} · {stock.name}</h1><p className="text-[10px] text-slate-500">{zh ? '技術分析' : 'Technical analysis'} · {range === '1D' ? (zh ? '5 分鐘 K' : '5-minute candles') : range === '1W' ? (zh ? '30 分鐘 K' : '30-minute candles') : (zh ? '日 K' : 'Daily')} · {data?.currency ?? stock.currency}</p></div>
     </div>
     <div className="px-3 pt-3">
       <div className="flex flex-wrap items-center justify-end gap-2">
