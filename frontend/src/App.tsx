@@ -131,7 +131,7 @@ function IndexView({ stocks, token }: { stocks: StockPosition[]; token: string }
       const quote = state?.chart;
       const change = changeFor(quote);
       return <button key={stock.id} type="button" onClick={() => onOpen(stock)} data-stock-quote={stock.symbol} title={state?.failed ? (language === 'zh' ? '行情暫時無法更新' : 'Quote update unavailable') : undefined} className="flex w-full items-center gap-3 py-4 text-left">
-        <span className="min-w-0 flex-1"><strong className="block text-[14px] text-slate-900">{stock.symbol}</strong><span className="block break-words text-[11px] text-slate-400">{stock.name}</span></span>
+        <span className="min-w-0 flex-1"><strong className="block text-[16px] text-slate-900">{stock.symbol}</strong><span className="block break-words text-[11px] text-slate-400">{stock.name}</span></span>
         <span className="shrink-0 text-right"><strong className="flex items-baseline justify-end gap-1 text-[12px] text-slate-900"><span>{quote ? quote.current_price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'}</span><span data-quote-currency className="text-[6px] font-normal text-slate-400">{quote?.currency ?? stock.currency}</span></strong>
           <span className={`block text-[12px] font-bold ${change == null ? 'text-slate-400' : change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{change == null ? '--' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}</span>
         </span><ChevronRight size={16} className="shrink-0 text-slate-300" />
