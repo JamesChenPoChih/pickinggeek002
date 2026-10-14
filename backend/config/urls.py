@@ -4,7 +4,7 @@ from django.views.generic import TemplateView
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
-from config.views import health_check, service_status
+from config.views import health_check, pwa_asset, service_status
 from pickinggeek import billing
 from pickinggeek.api import (
     StockViewSet,
@@ -29,6 +29,10 @@ admin.site.site_title = "Picking Geek Admin"
 admin.site.index_title = "Picking Geek Management"
 
 urlpatterns = [
+    path("sw.js", pwa_asset, {"name": "sw.js"}),
+    path("manifest.webmanifest", pwa_asset, {"name": "manifest.webmanifest"}),
+    path("offline.html", pwa_asset, {"name": "offline.html"}),
+    path("pwa-icons/<str:name>", pwa_asset),
     path("api/billing/", billing.billing_state),
     path("api/billing/checkout/", billing.checkout),
     path("api/billing/portal/", billing.portal),

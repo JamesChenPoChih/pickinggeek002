@@ -8,6 +8,7 @@ import {
 
 import { useLanguage } from "../../i18n";
 import SubscriptionView from "./SubscriptionView";
+import PwaInstall from './PwaInstall';
 import type { StockAppSchema } from "../../types/stock";
 
 type Screen = "main" | "profile" | "subscription" | "history" | "security" | "settings" | "support" | "about";
@@ -113,6 +114,7 @@ export default function MeView({ user, onLogout }: MeViewProps) {
 
   return <div className="pb-5">
     <section className="px-5 pb-5 pt-6"><div className="rounded-md border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-3"><div className="grid size-14 place-items-center rounded-full bg-sky-700 text-base font-black text-white">{name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</div><div className="min-w-0 flex-1"><h1 className="truncate text-lg font-black text-slate-950">{name}</h1><p className="truncate text-xs text-slate-400">@{handle}</p><span className="mt-1 inline-flex rounded bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">{plan === "FREE" ? c.freeMember : plan === "PREMIUM" ? "Premium" : c.proMember}</span></div></div><button type="button" onClick={() => setScreen("profile")} className="mt-4 flex h-9 w-full items-center justify-center gap-2 rounded-md border border-slate-300 text-xs font-semibold text-slate-700"><Pencil size={14} />{c.editProfile}</button></div></section>
+    <PwaInstall />
     <SettingsSection title={c.subscription}><SettingRow icon={CreditCard} label={c.managePlan} value={plan === "FREE" ? "Basic" : plan} onClick={() => setScreen("subscription")} /><SettingRow icon={RefreshCcw} label={language === "zh" ? "重新確認訂閱" : "Refresh subscription"} onClick={() => setScreen("subscription")} /><SettingRow icon={WalletCards} label={c.history} onClick={() => setScreen("history")} /></SettingsSection>
     <SettingsSection title={c.security}><SettingRow icon={ShieldCheck} label={c.security} value={c.linkedAccounts} onClick={() => setScreen("security")} /></SettingsSection>
     <SettingsSection title={c.settings}><SettingRow icon={Sun} label={c.appearance} value={theme === "light" ? c.light : theme === "dark" ? c.dark : c.system} onClick={() => setScreen("settings")} /><SettingRow icon={Languages} label={c.language} value={language === "zh" ? "繁體中文" : "English"} onClick={() => setScreen("settings")} /><SettingRow icon={Bell} label={c.notifications} onClick={() => setScreen("settings")} /><SettingRow icon={KeyRound} label={c.privacy} onClick={() => setScreen("settings")} /></SettingsSection>

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#191c1f" />
+  <title>Picking Geek - Offline</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; background: #191c1f; color: #fff; font-family: system-ui, sans-serif; padding: 32px; }
+    main { width: min(100%, 360px); text-align: center; }
+    img { width: 80px; height: 80px; border-radius: 8px; }
+    h1 { font-size: 24px; margin: 20px 0; }
+    p { color: #cbd5e1; font-size: 14px; line-height: 1.6; }
+    a { display: inline-block; margin-top: 16px; padding: 12px 24px; border-radius: 6px; color: #191c1f; background: #fff; font-weight: 600; text-decoration: none; }
+  </style>
+</head>
+<body><main>
+  <img src="/pwa-icons/icon-192.png" alt="Picking Geek" />
+  <h1>Picking Geek</h1>
+  <p id="status">You are offline. Market data is unavailable.</p>
+  <a id="retry" href="/">Try again</a>
+  <script>
+    if (navigator.language.toLowerCase().startsWith('zh')) {
+      document.getElementById('status').textContent = '\u76ee\u524d\u96e2\u7dda\uff0c\u7121\u6cd5\u53d6\u5f97\u884c\u60c5\u3002';
+      document.getElementById('retry').textContent = '\u91cd\u8a66';
+    }
+  </script>
+</main></body>
+</html>
