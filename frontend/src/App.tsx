@@ -5,6 +5,7 @@ import { addYahooStock, fetchStockChart, fetchStocks, removeTrackedStock, search
 import { AIAnalysisPanel, type AnalysisRecord } from "./components/mobile/AIAnalysisPanel";
 import type { HistorySelection } from './components/mobile/TodayAnalysis';
 import BullishSignals from './components/mobile/BullishSignals';
+import StockWheelPicker from './components/mobile/StockWheelPicker';
 import BottomNav, { type TabId } from "./components/mobile/BottomNav";
 import ChartSection from "./components/mobile/ChartSection";
 import Header from "./components/mobile/Header";
@@ -414,7 +415,7 @@ export default function App() {
               <MarketSnapshot stocks={stocks} token={token} />
             </div>
           )}
-          {activeTab === "index" && <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><div className="px-5 pb-4"><select aria-label={t('selectStock')} value={selected.id} onChange={event => setSelectedId(Number(event.target.value))} className="h-11 w-full rounded border border-slate-300 bg-white px-3 text-base text-slate-900">{stocks.map(stock => <option key={stock.id} value={stock.id}>{stock.symbol} · {stock.name}</option>)}</select></div><AIAnalysisPanel stock={selected} token={token} historyStore={analysisHistory} selection={analysisSelection} onSelectHistory={item => { setSelectedId(Number(item.key.split(':')[0])); setAnalysisSelection(item); }} /></>}
+          {activeTab === "index" && <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><div className="px-5 pb-4"><StockWheelPicker stocks={stocks} selectedId={selected.id} onSelect={id => { setSelectedId(id); setAnalysisSelection(null); }} /></div><AIAnalysisPanel stock={selected} token={token} historyStore={analysisHistory} selection={analysisSelection} onSelectHistory={item => { setSelectedId(Number(item.key.split(':')[0])); setAnalysisSelection(item); }} /></>}
           {activeTab === "search" && <SearchView token={token} stocks={stocks} onOpen={openStock} onAdd={addStock} />}
           {activeTab === "me" && <MeView user={schema.user} onLogout={logout} />}
         </main>
