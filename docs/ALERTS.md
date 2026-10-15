@@ -4,6 +4,11 @@ My Stock has a per-stock Set Alert action. Each user has one independently saved
 configuration per tracked stock. Multiple selected conditions are combined with
 OR; all hits for one completed bar are combined into one in-app notification.
 
+The Enable stock alerts control is a white/dark-gray switch. New configurations
+start disabled and may be saved with an empty rule list. Enabling requires at
+least one valid condition. Disabling preserves selected rules for later use and
+dims the stock's bell in My List.
+
 ## Timeframe and interpretation
 
 All rules use completed daily candles, independent of the short intraday ranges
@@ -48,7 +53,13 @@ are made by this feature.
 .\.venv\Scripts\python.exe backend/manage.py runserver 127.0.0.1:8000
 ```
 
-In a second terminal, run the worker:
+While the APP is visible, it checks notifications every 15 seconds and requests
+an owner-scoped evaluation. The backend allows one evaluation pass per user per
+60 seconds, with at most eight stocks per pass and four concurrent market-data
+fetches. Larger lists rotate across passes. Saving settings resets this cooldown.
+No separate worker is required for foreground-only use.
+
+For evaluation when no APP page is open, run the worker in a second terminal:
 
 ```powershell
 .\.venv\Scripts\python.exe backend/manage.py evaluate_alerts --loop --interval 60
@@ -64,8 +75,15 @@ and stops both children on shutdown. An existing service not managed by a Bluepr
 must have its Start Command updated manually to match render.yaml.
 
 The worker checks every 60 seconds after the previous pass finishes, with shared
-Yahoo chart caching. The in-app bell checks for new notifications every 30 seconds
+Yahoo chart caching. The in-app bell checks for new notifications every 15 seconds
 while the browser is visible. There is no guaranteed real-time delivery SLA.
+
+New notifications received while the APP is open show a dismissible in-app toast.
+The bell changes color for today's unread stock alerts, using the browser's
+timezone. Older unread items retain their unread badge but do not make the bell
+indicate a new alert today. Marking all notifications read clears the highlight.
+Summaries include configured MA periods, direction, Bollinger thresholds and
+the relevant indicator values captured at trigger time.
 
 The current Render free web service can sleep or be stopped; its worker sleeps
 with it. For continuous unattended alerts, use an always-on service or an external
@@ -75,5 +93,8 @@ paid service automatically.
 ## API
 
 - GET/PUT `/api/stocks/<stock_id>/alert/`: load/save settings.
-- GET `/api/notifications/`: latest 50 items and total unread count.
+- POST `/api/alerts/check/`: evaluate the authenticated user's active alerts,
+  subject to cooldown, batch limits and an additional 12-request/minute throttle.
+- GET `/api/notifications/?timezone=Asia/Taipei`: latest 50 items, total unread
+  count and today's unread stock-alert count (`today_unread`).
 - POST `/api/notifications/`: mark this user's notifications read.

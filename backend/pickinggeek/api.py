@@ -8,6 +8,7 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.conf import settings
 from django.db import transaction
+from django.db.models import Exists, OuterRef
 from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -20,7 +21,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from .models import NotificationQueue, Stock, TechnicalIndicatorCache, User, UserStock
+from .models import NotificationQueue, Stock, StockAlert, TechnicalIndicatorCache, User, UserStock
 from .serializers import IndicatorSerializer, StockSerializer, UserStockSerializer
 from .services.llm_router import LLMRouter, ReportFormatError, REPORT_KEYS, QUICK_REPORT_KEYS
 from .services.analysis_context import build_analysis_context, validate_peers
@@ -124,7 +125,9 @@ class StockViewSet(viewsets.ReadOnlyModelViewSet):
         query = Stock.objects.filter(
             is_active=True,
             followers__user=self.request.user,
-        ).select_related("indicator").distinct()
+        ).select_related("indicator").annotate(alert_enabled=Exists(
+            StockAlert.objects.filter(user=self.request.user, stock_id=OuterRef('pk'), enabled=True)
+        )).distinct()
         symbol = self.request.query_params.get("symbol")
         market = self.request.query_params.get("market")
         if symbol:

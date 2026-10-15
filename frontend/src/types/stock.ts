@@ -41,6 +41,7 @@ export interface StockIndicator {
 
 export interface StockPosition {
   id: number;
+  alertEnabled?: boolean;
   symbol: string;
   market: "US" | "TW";
   name: string;
@@ -68,6 +69,7 @@ export interface StockAppSchema {
 
 export interface StockApiResponse {
   id: number;
+  alert_enabled?: boolean;
   symbol: string;
   market: "US" | "TW";
   name: string;

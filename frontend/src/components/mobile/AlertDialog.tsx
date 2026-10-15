@@ -38,7 +38,7 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
   const [group, setGroup] = useState<Group>('MA');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [rules, setRules] = useState<Record<string, Rule>>(Object.fromEntries(definitions.map(item => [item.kind, { ...item.defaults }])));
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
   const [frequency, setFrequency] = useState<'ONCE' | 'DAILY'>('ONCE');
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
@@ -48,7 +48,7 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
     const controller = new AbortController(); setLoading(true); setReady(false); setError('');
     alertRequest<AlertSettings>(`stocks/${stock.id}/alert/`, { signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return;
-      setEnabled(value.id == null ? true : value.enabled); setFrequency(value.frequency);
+      setEnabled(value.enabled); setFrequency(value.frequency);
       setSelected(new Set(value.rules.map(rule => rule.kind)));
       setRules(current => ({ ...current, ...Object.fromEntries(value.rules.map(rule => [rule.kind, rule])) }));
       setReady(true);
@@ -83,15 +83,15 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
       <header className="flex shrink-0 items-center gap-2 border-b border-slate-200 px-4 py-3"><Bell size={18} /><div className="min-w-0 flex-1"><h2 id="alert-title" className="text-sm font-bold">{zh ? '設定個股警示' : 'Set Alert'}: {stock.symbol}</h2><p className="break-words text-xs text-slate-400">{stock.name} · {zh ? '日 K／完成交易日' : 'Daily / completed sessions'}</p></div><button type="button" disabled={saving} onClick={onClose} aria-label={zh ? '關閉警示設定' : 'Close alert settings'} title={zh ? '關閉' : 'Close'} className="grid size-10 shrink-0 place-items-center"><X size={19} /></button></header>
       <form className="flex min-h-0 flex-1 flex-col" onSubmit={async event => {
         event.preventDefault();
-        if (!selected.size) { setError(zh ? '請至少選擇一個警示條件' : 'Select at least one condition'); return; }
+        if (enabled && !selected.size) { setError(zh ? '請至少選擇一個警示條件' : 'Select at least one condition'); return; }
         setSaving(true); setError('');
-        try { await alertRequest(`stocks/${stock.id}/alert/`, { method: 'PUT', body: JSON.stringify({ enabled, frequency, rules: Array.from(selected).map(kind => rules[kind]) }) }); onSaved(); }
+        try { await alertRequest(`stocks/${stock.id}/alert/`, { method: 'PUT', body: JSON.stringify({ enabled, frequency, rules: Array.from(selected).map(kind => rules[kind]) }) }); window.dispatchEvent(new CustomEvent('pickinggeek:alerts-updated', { detail: { stockId: stock.id, enabled } })); onSaved(); }
         catch (reason) { setError(reason instanceof Error ? reason.message : 'Error'); }
         finally { setSaving(false); }
       }}>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {loading ? <p role="status" className="py-8 text-center text-xs">{zh ? '載入中…' : 'Loading…'}</p> : <>
-            <label className="mb-4 flex min-h-10 items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={enabled} onChange={event => setEnabled(event.target.checked)} />{zh ? '啟用個股警示' : 'Enable stock alerts'}</label>
+            <button type="button" role="switch" aria-label={zh ? '啟用個股警示' : 'Enable stock alerts'} aria-checked={enabled} disabled={saving} onClick={() => { setEnabled(value => !value); setError(''); }} className="mb-4 flex min-h-11 w-full items-center justify-between gap-3 text-left disabled:opacity-50"><span className="text-xs font-semibold">{zh ? '啟用個股警示' : 'Enable stock alerts'}</span><span aria-hidden="true" data-checked={enabled} className="app-switch-track relative h-6 w-11 shrink-0 rounded-full transition-colors"><span className={`app-switch-thumb absolute left-0.5 top-0.5 size-5 rounded-full shadow-sm transition-transform motion-reduce:transition-none ${enabled ? 'translate-x-5' : 'translate-x-0'}`} /></span></button>
             <div role="tablist" aria-label={zh ? '指標類型' : 'Indicator type'} className="mb-3 grid grid-cols-4 border-b border-slate-200">{(['MA', 'MACD', 'BB', 'SQUEEZE'] as const).map(item => <button type="button" role="tab" id={`alert-tab-${item}`} aria-controls="alert-rule-panel" tabIndex={group === item ? 0 : -1} aria-selected={group === item} key={item} onClick={() => setGroup(item)} onKeyDown={event => {
               const groups: Group[] = ['MA', 'MACD', 'BB', 'SQUEEZE'];
               if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
@@ -99,7 +99,7 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
                 setGroup(next); document.getElementById(`alert-tab-${next}`)?.focus();
               }
             }} className={`min-h-11 border-b-2 ${group === item ? 'border-emerald-500 text-slate-900' : 'border-transparent text-slate-400'}`}><span className="text-xs font-semibold">{item === 'MA' ? (zh ? '均線 MA' : 'MA') : item === 'BB' ? (zh ? '布林通道' : 'Bollinger') : item === 'SQUEEZE' ? 'Squeeze' : item}</span></button>)}</div>
-            <div role="tabpanel" id="alert-rule-panel" aria-labelledby={`alert-tab-${group}`} className="divide-y divide-slate-200">{definitions.filter(item => item.group === group).map(item => <fieldset key={item.kind} disabled={saving} className="py-3">
+            <div role="tabpanel" id="alert-rule-panel" aria-labelledby={`alert-tab-${group}`} className="divide-y divide-slate-200">{definitions.filter(item => item.group === group).map(item => <fieldset key={item.kind} disabled={saving || !enabled} className="py-3 disabled:opacity-50">
               <label className="flex min-h-9 cursor-pointer items-center gap-2 text-xs font-semibold"><input type="checkbox" checked={selected.has(item.kind)} onChange={event => setSelected(current => { const next = new Set(current); if (event.target.checked) next.add(item.kind); else next.delete(item.kind); return next; })} />{zh ? item.zh : item.en}</label>
               <div className="grid grid-cols-2 gap-2 pl-6">{item.parameters.map(parameter => <label key={parameter.key} className="min-w-0 text-xs text-slate-500">{zh ? parameter.zh : parameter.en}
                 {parameter.options ? <select aria-label={`${zh ? item.zh : item.en} ${zh ? parameter.zh : parameter.en}`} disabled={!selected.has(item.kind)} value={rules[item.kind][parameter.key]} onChange={event => change(item.kind, parameter.key, typeof item.defaults[parameter.key] === 'number' ? Number(event.target.value) : event.target.value)} className="mt-1 h-9 w-full min-w-0 rounded border border-slate-300 bg-white px-2 text-xs text-slate-900 disabled:opacity-40">{parameter.options.map(option => <option key={option.value} value={option.value}>{zh ? option.zh : option.en}</option>)}</select>

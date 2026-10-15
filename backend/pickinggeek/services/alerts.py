@@ -175,7 +175,12 @@ def evaluate_alert(alert_id, chart):
             NotificationQueue.objects.create(user_id=alert.user_id, stock_id=alert.stock_id,
                 title=f"{alert.stock.symbol} technical alert", body=', '.join(rule['kind'] for rule in hits),
                 payload={'type': 'stock_alert', 'alert_id': alert.id, 'symbol': alert.stock.symbol,
-                         'market_date': date.isoformat(), 'rules': hits, 'price': points[-1]['price']})
+                         'name': alert.stock.name, 'currency': chart.get('currency', ''),
+                         'timezone': chart.get('timezone', ''),
+                         'market_date': date.isoformat(), 'rules': hits, 'price': points[-1]['price'],
+                         'snapshot': {key: points[-1].get(key) for key in [
+                             *[f'ma{period}' for period in sorted(PERIODS)], 'macd', 'macd_signal',
+                             'histogram', 'bb_upper', 'bb_middle', 'bb_lower', 'bb_bandwidth', 'squeeze_momentum']}})
             alert.last_notified_date = date
             if alert.frequency == 'ONCE':
                 alert.enabled = False

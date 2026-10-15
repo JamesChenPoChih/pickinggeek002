@@ -106,6 +106,19 @@ class AlertApiTests(TestCase):
         self.assertFalse(StockAlert.objects.exists())
         self.assertEqual(self.client.put(self.path, [], format='json').status_code, 400)
 
+    def test_disabled_empty_settings_can_save_and_reload(self):
+        body = {'enabled': False, 'frequency': 'ONCE', 'rules': []}
+        self.assertEqual(self.client.put(self.path, body, format='json').status_code, 200)
+        alert = StockAlert.objects.get(user=self.user, stock=self.stock)
+        self.assertFalse(alert.enabled)
+        self.assertEqual(alert.rules, [])
+        self.assertFalse(self.client.get(self.path).data['enabled'])
+        self.assertEqual(self.client.get(self.path).data['rules'], [])
+        body['enabled'] = True
+        self.assertEqual(self.client.put(self.path, body, format='json').status_code, 400)
+        alert.refresh_from_db()
+        self.assertFalse(alert.enabled)
+
     def test_notifications_are_private_and_mark_read(self):
         NotificationQueue.objects.create(user=self.user, stock=self.stock, title='Mine', body='Test')
         NotificationQueue.objects.create(user=self.other, stock=self.stock, title='Other', body='Test')

@@ -129,7 +129,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: () => void }) {
-  return <button type="button" onClick={onChange} className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left"><span className="text-xs font-semibold text-slate-700">{label}</span><span className={`relative h-5 w-9 rounded-full transition ${checked ? "bg-sky-600" : "bg-slate-300"}`}><span className={`absolute top-0.5 size-4 rounded-full bg-white transition ${checked ? "left-[18px]" : "left-0.5"}`} /></span></button>;
+  return <button type="button" role="switch" aria-label={label} aria-checked={checked} onClick={onChange} className="flex min-h-11 w-full items-center justify-between gap-3 px-3 py-2 text-left"><span className="text-xs font-semibold text-slate-700">{label}</span><span aria-hidden="true" data-checked={checked} className="app-switch-track relative h-5 w-9 shrink-0 rounded-full transition-colors"><span className={`app-switch-thumb absolute top-0.5 size-4 rounded-full transition-all motion-reduce:transition-none ${checked ? "left-[18px]" : "left-0.5"}`} /></span></button>;
 }
 
 function FeedbackForm({ c }: { c: typeof copy.zh | typeof copy.en }) {

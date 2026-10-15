@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BellPlus, ChevronRight, ExternalLink, LoaderCircle, Search, Star, TrendingUp } from "lucide-react";
+import { BellPlus, ChevronRight, ExternalLink, LoaderCircle, Search, Star } from "lucide-react";
 
 import { addYahooStock, fetchStockChart, fetchStocks, removeTrackedStock, searchYahooStocks, type AuthTokens, type AuthUser } from "./api";
 import { AIAnalysisPanel, type AnalysisRecord } from "./components/mobile/AIAnalysisPanel";
@@ -13,7 +13,6 @@ import { LoginScreen } from "./components/mobile/LoginScreen";
 import MeView from "./components/mobile/MeView";
 import StockTechnicalView from "./components/mobile/StockTechnicalView";
 import AlertDialog from './components/mobile/AlertDialog';
-import NestedDetails from "./components/mobile/NestedDetails";
 import StockCard from "./components/mobile/StockCard";
 import type { ChartPoint, DetailNode, StockApiResponse, StockAppSchema, StockPosition, YahooChartResponse, YahooStockResult } from "./types/stock";
 import { useLanguage } from "./i18n";
@@ -79,7 +78,7 @@ function toPosition(stock: StockApiResponse, index: number): StockPosition {
   const chartData = stock.indicator?.chart_points?.length ? stock.indicator.chart_points : makeChart(currentPrice, index * 3);
   const previous = chartData.at(-2)?.price ?? currentPrice;
   const latest = chartData.at(-1)?.price ?? currentPrice;
-  return { ...stock, currentPrice: latest, changePercent: previous ? ((latest - previous) / previous) * 100 : 0, chartData, nestedDetails: detailNodes(stock) };
+  return { ...stock, alertEnabled: !!stock.alert_enabled, currentPrice: latest, changePercent: previous ? ((latest - previous) / previous) * 100 : 0, chartData, nestedDetails: detailNodes(stock) };
 }
 
 const fallbackStocks: StockPosition[] = [
@@ -95,6 +94,8 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
   const [quotes, setQuotes] = useState<Record<number, { chart: YahooChartResponse | null; failed: boolean }>>({});
   const onOpen = (stock: StockPosition) => setTechnicalId(stock.id);
   const { t, language } = useLanguage();
+  const orderedStocks = useMemo(() => [...stocks].sort((a, b) => a.market !== b.market
+    ? (a.market === 'US' ? -1 : 1) : a.symbol.localeCompare(b.symbol, 'en', { numeric: true })), [stocks]);
   useEffect(() => {
     if (!token || technicalId !== null || overviewOnly) return;
     const controller = new AbortController();
@@ -134,8 +135,8 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
     {overviewOnly && <><div className="mb-5"><p className="text-xs font-semibold text-sky-700">{t("brandName")}</p><h1 className="mt-1 text-2xl font-black text-slate-950">{t("todayMarket")}</h1></div>
     <div className="grid grid-cols-2 gap-3"><div className="rounded-md bg-slate-950 p-4 text-white"><p className="text-xs text-slate-400">{t("trackedAssets")}</p><strong className="mt-2 block text-3xl">{stocks.length}</strong></div><BullishSignals token={token} stockKey={stocks.map(stock => stock.id).join(',')} /></div>
     </>}
-    {!overviewOnly && <><h2 className="mb-2 text-sm font-bold text-slate-950">{t("marketSnapshot")}</h2>
-    <div className="stock-snapshot-list">{stocks.map(stock => {
+    {!overviewOnly && <><h2 className="mb-2 text-base font-bold text-slate-950">{t("marketSnapshot")}</h2>
+    <div className="stock-snapshot-list">{orderedStocks.map(stock => {
       const state = quotes[stock.id];
       const quote = state?.chart;
       const change = changeFor(quote);
@@ -144,7 +145,7 @@ function MarketSnapshot({ stocks, token, overviewOnly = false }: { stocks: Stock
         <span className="shrink-0 text-right"><strong className="flex items-baseline justify-end gap-1 text-[12px] text-slate-900"><span>{quote ? quote.current_price.toLocaleString(undefined, { maximumFractionDigits: 2 }) : '--'}</span><span data-quote-currency className="text-[6px] font-normal text-slate-400">{quote?.currency ?? stock.currency}</span></strong>
           <span className={`block text-[12px] font-bold ${change == null ? 'text-slate-400' : change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>{change == null ? '--' : `${change >= 0 ? '+' : ''}${change.toFixed(2)}%`}</span>
         </span>
-      </button><button type="button" onClick={() => { setAlertSaved(false); setAlertStockId(stock.id); }} aria-label={`Set Alert ${stock.symbol}`} title={`Set Alert ${stock.symbol}`} className="grid size-11 shrink-0 place-items-center rounded text-slate-900 hover:bg-slate-100"><BellPlus size={18} /></button></div>;
+      </button><button type="button" onClick={() => { setAlertSaved(false); setAlertStockId(stock.id); }} aria-label={`Set Alert ${stock.symbol}`} aria-description={stock.alertEnabled ? (language === 'zh' ? '警示已啟用' : 'Alerts enabled') : (language === 'zh' ? '警示未啟用' : 'Alerts not enabled')} title={`${stock.symbol} · ${stock.alertEnabled ? (language === 'zh' ? '警示已啟用' : 'Alerts enabled') : (language === 'zh' ? '設定警示' : 'Set Alert')}`} data-alert-enabled={!!stock.alertEnabled} className={`grid size-11 shrink-0 place-items-center rounded hover:bg-slate-100 ${stock.alertEnabled ? 'text-slate-900' : 'text-slate-400'}`}><BellPlus size={18} strokeWidth={stock.alertEnabled ? 2.8 : 1.5} /></button></div>;
     })}</div></>}
   </section>;
 }
@@ -214,8 +215,8 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
         <span className={`text-xs font-semibold ${market === 'US' ? 'text-slate-900' : 'text-slate-400'}`}>{language === 'zh' ? '美股' : 'US'}</span>
         <button type="button" role="switch" aria-label={language === 'zh' ? '台股市場' : 'Taiwan market'} aria-checked={market === 'TW'} disabled={Boolean(addingSymbol)} onClick={() => {
           setMarket(market === 'US' ? 'TW' : 'US'); setQuery(''); setResults([]); setError(false); setAddError(''); setLoading(false);
-        }} className={`relative h-8 w-14 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 disabled:opacity-50 ${market === 'TW' ? 'bg-emerald-500' : 'bg-slate-400'}`}>
-          <span className={`absolute left-1 top-1 size-6 rounded-full bg-white shadow-sm transition-transform ${market === 'TW' ? 'translate-x-6' : 'translate-x-0'}`} />
+        }} data-checked={market === 'TW'} className="app-switch-track relative h-8 w-14 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-slate-400 disabled:opacity-50">
+          <span className={`app-switch-thumb absolute left-1 top-1 size-6 rounded-full shadow-sm transition-transform motion-reduce:transition-none ${market === 'TW' ? 'translate-x-6' : 'translate-x-0'}`} />
         </button>
         <span className={`text-xs font-semibold ${market === 'TW' ? 'text-slate-900' : 'text-slate-400'}`}>{language === 'zh' ? '台股' : 'Taiwan'}</span>
       </div>
@@ -276,6 +277,30 @@ export default function App() {
   const [analysisSelection, setAnalysisSelection] = useState<HistorySelection | null>(null);
   useEffect(() => { setAnalysisSelection(null); }, [language]);
   const [stocks, setStocks] = useState<StockPosition[]>(fallbackStocks);
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const detail = (event as CustomEvent<{ stockId: number; enabled: boolean }>).detail;
+      if (!detail || typeof detail.stockId !== 'number' || typeof detail.enabled !== 'boolean') return;
+      setStocks(current => current.map(stock => stock.id === detail.stockId ? { ...stock, alertEnabled: detail.enabled } : stock));
+    };
+    const sync = (event: Event) => {
+      const ids = (event as CustomEvent<number[]>).detail;
+      if (!Array.isArray(ids)) return;
+      setStocks(current => {
+        let changed = false;
+        const next = current.map(stock => {
+          const enabled = ids.includes(stock.id);
+          if (!!stock.alertEnabled === enabled) return stock;
+          changed = true;
+          return { ...stock, alertEnabled: enabled };
+        });
+        return changed ? next : current;
+      });
+    };
+    window.addEventListener('pickinggeek:alerts-updated', saved);
+    window.addEventListener('pickinggeek:alert-status', sync);
+    return () => { window.removeEventListener('pickinggeek:alerts-updated', saved); window.removeEventListener('pickinggeek:alert-status', sync); };
+  }, []);
   const [selectedId, setSelectedId] = useState(fallbackStocks[0].id);
   const [activeTab, setActiveTab] = useState<TabId>(() => new URLSearchParams(window.location.search).has("billing") ? "me" : "stocks");
   const [liveQuote, setLiveQuote] = useState<YahooChartResponse | null>(null);
@@ -405,13 +430,6 @@ export default function App() {
             <div className="space-y-4 px-4 py-4">
               <StockCard title={schema.portfolio.title} stock={displayStock} stocks={stocks} onSelect={openStock} onRemove={(stock) => void removeStock(stock)} removing={removingId === selected.id} removeError={removeError} />
               <ChartSection stock={selected} token={token} liveQuote={liveQuote} />
-              <section className="rounded-md border border-slate-200 bg-white px-4 py-3">
-                <div className="mb-2 flex items-center justify-between">
-                  <h2 className="text-sm font-bold text-slate-950">{t("technicalIndicators")}</h2>
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-600"><TrendingUp size={12} />{t("liveStatus")}</span>
-                </div>
-                <NestedDetails nodes={selected.nestedDetails} />
-              </section>
               <MarketSnapshot stocks={stocks} token={token} />
             </div>
           )}

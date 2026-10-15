@@ -12,6 +12,7 @@ class IndicatorSerializer(serializers.ModelSerializer):
 
 class StockSerializer(serializers.ModelSerializer):
     indicator = IndicatorSerializer(read_only=True)
+    alert_enabled = serializers.BooleanField(read_only=True, default=False)
     name = serializers.SerializerMethodField()
 
     def get_name(self, stock):
@@ -19,7 +20,7 @@ class StockSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Stock
-        fields = ["id", "symbol", "market", "name", "currency", "indicator"]
+        fields = ["id", "symbol", "market", "name", "currency", "indicator", "alert_enabled"]
 
 
 class UserStockSerializer(serializers.ModelSerializer):

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { RotateCcw, Settings2, ZoomIn, ZoomOut } from 'lucide-react';
+import { RotateCcw, ZoomIn, ZoomOut } from 'lucide-react';
 import { useChartZoom } from './useChartZoom';
-import { Area, Bar, Cell, ComposedChart, Line, ReferenceLine, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, ComposedChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 import { fetchStockChart } from "../../api";
 import { useLanguage } from "../../i18n";
@@ -10,25 +10,6 @@ import type { ChartRange, StockPosition, YahooChartResponse } from "../../types/
 interface ChartSectionProps { stock: StockPosition; token: string; liveQuote: YahooChartResponse | null }
 
 const ranges: ChartRange[] = ["1D", "1W", "1M", "6M", "YTD", "1Y", "3Y", "5Y", "ALL"];
-const averages = [
-  { key: 'ma60', label: 'MA60', color: '#d97706' },
-  { key: 'ma100', label: 'MA100', color: '#2563eb' },
-  { key: 'ma200', label: 'MA200', color: '#9333ea' },
-  { key: 'ma250', label: 'MA250', color: '#db2777' },
-] as const;
-type AverageKey = typeof averages[number]['key'];
-const defaultColors = Object.fromEntries(averages.map(item => [item.key, item.color])) as Record<AverageKey, string>;
-const colorStorageKey = 'pickinggeek_indicator_colors';
-
-function readColors(): Record<AverageKey, string> {
-  try {
-    const saved = JSON.parse(localStorage.getItem(colorStorageKey) || '{}');
-    return Object.fromEntries(averages.map(item => [item.key,
-      typeof saved?.[item.key] === 'string' && /^#[0-9a-f]{6}$/i.test(saved[item.key]) ? saved[item.key] : item.color,
-    ])) as Record<AverageKey, string>;
-  } catch { return { ...defaultColors }; }
-}
-
 export default function ChartSection({ stock, token, liveQuote }: ChartSectionProps) {
   const { language, t } = useLanguage();
   const [range, setRange] = useState<ChartRange>("1D");
@@ -36,33 +17,24 @@ export default function ChartSection({ stock, token, liveQuote }: ChartSectionPr
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [retryNonce, setRetryNonce] = useState(0);
-  const [technical, setTechnical] = useState(false);
-  const [selected, setSelected] = useState<AverageKey[]>(['ma60', 'ma200', 'ma250']);
-  const [showMacd, setShowMacd] = useState(true);
-  const [colorSettings, setColorSettings] = useState(false);
-  const [colors, setColors] = useState(readColors);
-  useEffect(() => {
-    try { localStorage.setItem(colorStorageKey, JSON.stringify(colors)); } catch { /* Storage can be disabled. */ }
-  }, [colors]);
-  const visibleRanges = technical ? ranges.filter((item) => item !== '1D' && item !== '1W') : ranges;
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError(false);
     setChart(null);
-    fetchStockChart(token, stock.id, range, controller.signal, technical)
+    fetchStockChart(token, stock.id, range, controller.signal)
       .then((result) => { if (!controller.signal.aborted) setChart(result); })
       .catch((chartError) => {
         if (!controller.signal.aborted && !(chartError instanceof DOMException && chartError.name === "AbortError")) setError(true);
       })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [range, retryNonce, stock.id, token, technical]);
+  }, [range, retryNonce, stock.id, token]);
 
-  const activeChart = !technical && range === "1D" ? liveQuote ?? chart : chart;
+  const activeChart = range === "1D" ? liveQuote ?? chart : chart;
   const isLoading = loading && !activeChart;
-  const zoom = useChartZoom(activeChart?.points.length ?? 0, `${stock.id}:${range}:${technical}`);
+  const zoom = useChartZoom(activeChart?.points.length ?? 0, `${stock.id}:${range}`);
   const visibleChart = activeChart ? { ...activeChart, points: activeChart.points.slice(zoom.first, zoom.last) } : null;
   const zoomLabel = language === 'zh' ? ['放大', '縮小', '重設縮放'] : ['Zoom in', 'Zoom out', 'Reset zoom'];
 
@@ -92,70 +64,18 @@ export default function ChartSection({ stock, token, liveQuote }: ChartSectionPr
         {isLoading && <div className="grid h-full place-items-center text-xs text-slate-400"><span className="animate-pulse">{t("chartLoading")}</span></div>}
         {!isLoading && error && !activeChart && <div className="grid h-full place-items-center px-5 text-center text-xs text-rose-600"><div><p>{t("chartUnavailable")}</p><button type="button" onClick={() => setRetryNonce((value) => value + 1)} className="mt-3 h-8 rounded border border-rose-200 bg-rose-50 px-3 text-[10px] font-bold text-rose-700">{t("chartRetry")}</button></div></div>}
         {!isLoading && activeChart && (
-          <AreaChartView chart={visibleChart!} color={color} colors={colors} syncId={`stock-${stock.id}`} selected={technical ? selected : []} formatTimestamp={(value) => formatter.format(new Date(value * 1000))} />
+          <AreaChartView chart={visibleChart!} color={color} syncId={`stock-${stock.id}`} formatTimestamp={(value) => formatter.format(new Date(value * 1000))} />
         )}
       </div>
-      {technical && showMacd && activeChart && !isLoading && <div className="mt-3 border-t border-slate-100 pt-3">
-        <div className="mb-1 flex flex-wrap gap-3 px-1 text-[10px] font-medium">
-          <span className="text-slate-900">MACD (12, 26, 9)</span><span className="text-slate-900">DIF</span><span className="text-slate-900">DEA</span>
-        </div>
-        <div ref={zoom.macdRef} {...zoom.handlers} style={{ touchAction: 'none' }} className="h-32 w-full select-none cursor-grab active:cursor-grabbing" data-chart="macd" data-visible-points={visibleChart?.points.length ?? 0} aria-label="MACD">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-            <ComposedChart data={visibleChart!.points} syncId={`stock-${stock.id}`} margin={{ top: 8, right: 8, left: -25, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="#eef2f6" />
-              <XAxis dataKey="timestamp" type="number" scale="time" domain={['dataMin', 'dataMax']} tickFormatter={(value) => formatter.format(new Date(value * 1000))} tick={{ fontSize: 9, fill: '#94a3b8' }} minTickGap={28} axisLine={false} tickLine={false} />
-              <YAxis width={55} tick={{ fontSize: 9, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-              <Tooltip labelFormatter={(value) => formatter.format(new Date(Number(value) * 1000))} formatter={(value, name) => [Number(value).toFixed(4), name]} contentStyle={{ fontSize: 11, borderRadius: 6 }} />
-              <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey="histogram" name="Histogram" isAnimationActive={false}>
-                {visibleChart!.points.map((point) => <Cell key={point.timestamp} fill={(point.histogram ?? 0) >= 0 ? '#059669' : '#e11d48'} />)}
-              </Bar>
-              <Line dataKey="macd" name="DIF" stroke="#2563eb" dot={false} strokeWidth={1.5} isAnimationActive={false} />
-              <Line dataKey="macd_signal" name="DEA" stroke="#d97706" dot={false} strokeWidth={1.5} isAnimationActive={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </div>}
-      <div className="mb-1 mt-2 grid gap-0.5 px-1" style={{ gridTemplateColumns: `repeat(${visibleRanges.length}, minmax(0, 1fr))` }} aria-label={t("marketData")}>
-        {visibleRanges.map((item) => <button key={item} type="button" aria-pressed={range === item} onClick={() => setRange(item)} className={`h-6 min-w-0 rounded px-0.5 text-[9px] font-semibold transition ${range === item ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{item}</button>)}
+      <div className="mb-1 mt-2 grid gap-0.5 px-1" style={{ gridTemplateColumns: `repeat(${ranges.length}, minmax(0, 1fr))` }} aria-label={t("marketData")}>
+        {ranges.map((item) => <button key={item} type="button" aria-pressed={range === item} onClick={() => setRange(item)} className={`h-6 min-w-0 rounded px-0.5 text-[9px] font-semibold transition ${range === item ? "bg-slate-950 text-white" : "bg-slate-100 text-slate-500 hover:bg-slate-200"}`}>{item}</button>)}
       </div>
       {activeChart?.previous_close != null && <p className="px-1 pt-1 text-[9px] text-slate-400">{t(range === "1D" ? "previousClose" : "periodStart")}: {Number(activeChart.previous_close).toLocaleString(undefined, { maximumFractionDigits: 2 })} {activeChart.currency}</p>}
-      <div className="mt-3 border-t border-slate-200 px-1 pt-3">
-        <div className="flex min-h-11 items-center justify-between gap-3">
-          <label htmlFor="technical-chart-toggle" className="cursor-pointer text-sm font-semibold text-slate-700">{t('technicalIndicators')}{technical ? (language === 'zh' ? ' · 日線' : ' · Daily') : ''}</label>
-          <button type="button" aria-label={language === 'zh' ? '指標顏色設定' : 'Indicator colors'} title={language === 'zh' ? '指標顏色設定' : 'Indicator colors'} aria-expanded={colorSettings} aria-controls="indicator-color-settings" onClick={() => setColorSettings(value => !value)} className="ml-auto grid size-9 shrink-0 place-items-center rounded text-slate-900 hover:bg-slate-100 focus-visible:outline-2 focus-visible:outline-sky-500"><Settings2 size={17} /></button>
-          <button id="technical-chart-toggle" type="button" role="switch" aria-checked={technical} aria-controls="technical-chart-options" aria-label={t('technicalIndicators')} onClick={() => {
-            setChart(null); setLoading(true); setError(false);
-            if (!technical && (range === '1D' || range === '1W')) setRange('6M');
-            setTechnical(!technical);
-          }} className={`relative h-8 w-14 shrink-0 rounded-full transition-colors focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-emerald-600 ${technical ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-            <span className={`absolute left-1 top-1 size-6 rounded-full bg-white shadow-sm transition-transform ${technical ? 'translate-x-6' : 'translate-x-0'}`} />
-          </button>
-        </div>
-        {technical && <fieldset id="technical-chart-options" aria-label={t('technicalIndicators')} className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-          {averages.map((average) => <label key={average.key} className="flex min-h-9 cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-900">
-            <input type="checkbox" className="size-4" style={{ accentColor: 'currentColor' }} checked={selected.includes(average.key)} onChange={() => setSelected((values) => values.includes(average.key) ? values.filter((key) => key !== average.key) : [...values, average.key])} />
-            {average.label}
-          </label>)}
-          <label className="flex min-h-9 cursor-pointer items-center gap-1.5 text-xs font-semibold text-slate-900"><input type="checkbox" className="size-4" style={{ accentColor: 'currentColor' }} checked={showMacd} onChange={(event) => setShowMacd(event.target.checked)} />MACD</label>
-          {activeChart && selected.some((key) => !activeChart.points.some((point) => point[key] != null)) && <p className="w-full text-[10px] text-slate-500">{language === 'zh' ? '部分均線的歷史資料不足' : 'Insufficient history for some averages'}</p>}
-        </fieldset>}
-        {colorSettings && <fieldset id="indicator-color-settings" className="mt-3 border-t border-slate-200 pt-3 text-slate-900">
-          <legend className="px-1 text-xs font-semibold">{language === 'zh' ? '均線顏色' : 'Moving average colors'}</legend>
-          <div className="grid grid-cols-2 gap-x-5 gap-y-2">
-            {averages.map(average => <label key={average.key} className="flex min-h-10 items-center justify-between gap-2 text-xs font-semibold">
-              {average.label}
-              <input type="color" aria-label={`${average.label} ${language === 'zh' ? '線條顏色' : 'line color'}`} value={colors[average.key]} onChange={event => setColors(previous => ({ ...previous, [average.key]: event.target.value }))} className="h-8 w-10 cursor-pointer rounded border border-slate-200 bg-transparent p-0.5" />
-            </label>)}
-          </div>
-          <button type="button" onClick={() => setColors({ ...defaultColors })} className="mt-2 flex min-h-9 items-center gap-1.5 text-xs font-medium hover:underline"><RotateCcw size={13} />{language === 'zh' ? '恢復預設顏色' : 'Reset colors'}</button>
-        </fieldset>}
-      </div>
     </section>
   );
 }
 
-function AreaChartView({ chart, color, colors, selected, syncId, formatTimestamp }: { chart: YahooChartResponse; color: string; colors: Record<AverageKey, string>; selected: AverageKey[]; syncId: string; formatTimestamp: (value: number) => string }) {
+function AreaChartView({ chart, color, syncId, formatTimestamp }: { chart: YahooChartResponse; color: string; syncId: string; formatTimestamp: (value: number) => string }) {
   return (
     <ResponsiveContainer width="100%" height="100%" minWidth={0}>
       <ComposedChart data={chart.points} syncId={syncId} margin={{ top: 8, right: 8, left: -25, bottom: 0 }}>
@@ -164,7 +84,6 @@ function AreaChartView({ chart, color, colors, selected, syncId, formatTimestamp
         <YAxis domain={["auto", "auto"]} tick={{ fill: "#94a3b8", fontSize: 9 }} axisLine={false} tickLine={false} width={55} />
         <Tooltip labelFormatter={(value) => formatTimestamp(Number(value))} formatter={(value, name) => [Number(value).toLocaleString(undefined, { maximumFractionDigits: 4 }), name]} contentStyle={{ border: "1px solid #e2e8f0", borderRadius: 6, fontSize: 11, boxShadow: "0 8px 24px rgba(15,23,42,.08)" }} />
         <Area dataKey="price" stroke={color} fill={color} fillOpacity={0.12} strokeWidth={2} dot={false} isAnimationActive={false} />
-        {averages.filter((average) => selected.includes(average.key)).map((average) => <Line key={average.key} dataKey={average.key} name={average.label} stroke={colors[average.key]} strokeWidth={1.6} dot={false} connectNulls={false} isAnimationActive={false} />)}
       </ComposedChart>
     </ResponsiveContainer>
   );
