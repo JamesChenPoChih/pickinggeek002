@@ -50,6 +50,9 @@ class NativeNameTests(SimpleTestCase):
 
 class TaiwanSearchTests(TestCase):
     def setUp(self):
+        directory = patch('pickinggeek.services.yahoo_finance.search_directory', return_value=None)
+        directory.start()
+        self.addCleanup(directory.stop)
         for target in ['pickinggeek.api.native_stock_name', 'pickinggeek.serializers.native_stock_name']:
             patcher = patch(target, side_effect=lambda symbol, market, fallback: fallback)
             patcher.start()
@@ -85,7 +88,7 @@ class TaiwanSearchTests(TestCase):
         self.assertEqual(results[0]['name'], '台積電')
         self.assertEqual(results[1]['asset_type'], 'ETF')
         self.assertEqual(search_market_assets('台', market='TW'), results)
-        self.assertEqual(get_mock.call_count, 4)
+        self.assertEqual(get_mock.call_count, 1)
 
     @patch('pickinggeek.services.yahoo_finance.httpx.get')
     def test_chinese_search_empty_or_malformed_response(self, get_mock):
@@ -130,6 +133,34 @@ class TaiwanSearchTests(TestCase):
     def test_rejects_unknown_market(self):
         self.assertEqual(self.client.get('/api/stocks/search/', {'q': '2330', 'market': 'INVALID'}).status_code, 400)
         self.assertEqual(self.client.post('/api/watchlist/yahoo/', {'symbol': '2330.TW', 'market': 'INVALID'}, format='json').status_code, 400)
+
+    @patch('pickinggeek.api.enrich_market_assets')
+    @patch('pickinggeek.api.search_market_assets')
+    def test_chinese_search_returns_identities_without_waiting_for_quotes(self, search, enrich):
+        for query, symbol, name in [('聯', '2454.TW', '聯發科'), ('緯創', '3231.TW', '緯創')]:
+            search.return_value = [{'symbol': symbol, 'name': name, 'market': 'TW', 'currency': 'TWD'}]
+            response = self.client.get('/api/stocks/search/', {'q': query, 'market': 'TW'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data['results'][0]['name'], name)
+            self.assertIsNone(response.data['results'][0]['price'])
+            search.assert_called_with(query, market='TW')
+        enrich.assert_not_called()
+
+    @patch('pickinggeek.services.yahoo_finance.httpx.get')
+    def test_add_0050_and_2317_without_external_search(self, get):
+        from unittest.mock import Mock
+        for code, kind in [('0050', 'ETF'), ('2317', 'EQUITY')]:
+            get.return_value = Mock(status_code=200)
+            get.return_value.json.return_value = {'chart': {'result': [{'meta': {
+                'symbol': f'{code}.TW', 'instrumentType': kind, 'currency': 'TWD', 'shortName': code,
+            }}]}}
+            response = self.client.post('/api/watchlist/yahoo/', {'symbol': code, 'market': 'TW'}, format='json')
+            self.assertEqual(response.status_code, 201, response.data)
+            self.assertEqual(response.data['symbol'], code)
+            self.assertEqual(response.data['currency'], 'TWD')
+            again = self.client.post('/api/watchlist/yahoo/', {'symbol': f'{code}.TW', 'market': 'TW'}, format='json')
+            self.assertEqual(again.status_code, 200)
+        self.assertEqual(UserStock.objects.filter(user=self.user).count(), 2)
 
     @patch('pickinggeek.services.yahoo_finance.httpx.get')
     def test_chart_does_not_duplicate_taiwan_suffix(self, get_mock):

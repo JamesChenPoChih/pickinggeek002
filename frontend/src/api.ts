@@ -152,23 +152,46 @@ export async function alertRequest<T>(path: string, init: RequestInit = {}): Pro
 
 export async function searchYahooStocks(token: string, query: string, signal?: AbortSignal, market: 'US' | 'TW' = 'US'): Promise<YahooStockResult[]> {
   const params = new URLSearchParams({ q: query, market });
-  const response = await authorizedFetch(`${API_BASE}/stocks/search/?${params}`, token, { signal });
-  if (!response.ok) throw new Error(`Yahoo Finance search responded ${response.status}`);
-  const payload = await response.json() as { results: YahooStockResult[] };
-  return payload.results;
+  const controller = new AbortController();
+  const cancel = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  signal?.addEventListener('abort', cancel, { once: true });
+  const timer = window.setTimeout(cancel, 18000);
+  try {
+    const response = await authorizedFetch(`${API_BASE}/stocks/search/?${params}`, token, { signal: controller.signal });
+    if (!response.ok) throw new Error(`Yahoo Finance search responded ${response.status}`);
+    const payload = await response.json() as { results: YahooStockResult[] };
+    return payload.results;
+  } catch (error) {
+    if (controller.signal.aborted && !signal?.aborted) throw new Error('Search timed out');
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+    signal?.removeEventListener('abort', cancel);
+  }
 }
 
 export async function addYahooStock(token: string, symbol: string, market: 'US' | 'TW' = 'US'): Promise<StockApiResponse> {
-  const response = await authorizedFetch(`${API_BASE}/watchlist/yahoo/`, token, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ symbol, market }),
-  });
-  if (!response.ok) {
-    const payload = await response.json().catch(() => ({})) as { detail?: string };
-    throw new Error(payload.detail || `Watchlist API responded ${response.status}`);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 20000);
+  try {
+    const response = await authorizedFetch(`${API_BASE}/watchlist/yahoo/`, token, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, market }),
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({})) as { detail?: string };
+      throw new Error(payload.detail || `Watchlist API responded ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    if (controller.signal.aborted) throw new Error('加入股票逾時，請重新整理清單確認是否已加入，再重試。 / Request timed out; refresh your list before retrying.');
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
   }
-  return response.json();
 }
 
 export async function removeTrackedStock(token: string, stockId: number): Promise<void> {

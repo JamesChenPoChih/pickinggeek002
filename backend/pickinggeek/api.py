@@ -157,7 +157,12 @@ def yahoo_stock_search(request):
     if len(query) > 50:
         return Response({"detail": "Search query is too long"}, status=status.HTTP_400_BAD_REQUEST)
     try:
-        results = enrich_market_assets(search_market_assets(query, market=market))
+        assets = search_market_assets(query, market=market)
+        if market == 'TW':
+            results = [{**asset, 'price': None, 'change_percent': None,
+                        'market_state': 'UNAVAILABLE', 'updated_at': None} for asset in assets]
+        else:
+            results = enrich_market_assets(assets)
     except YahooFinanceError:
         return Response(
             {"detail": "Yahoo Finance search is temporarily unavailable"},

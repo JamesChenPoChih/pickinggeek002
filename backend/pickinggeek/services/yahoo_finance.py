@@ -9,6 +9,7 @@ import re
 from urllib.parse import quote as urlquote
 from django.core.cache import cache
 from .native_names import native_stock_name
+from .taiwan_directory import search_directory
 
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -54,8 +55,45 @@ def get_market_asset(symbol: str, market: str = 'US') -> dict | None:
     normalized = symbol.strip().upper()
     if not normalized:
         return None
+    if market.upper() == 'TW' and re.fullmatch(r'\d{4,6}[A-Z]?(?:\.TWO?)?', normalized):
+        # Adding an exact ticker must not wait for a whole-market directory refresh.
+        suffixes = [normalized.rsplit('.', 1)[1]] if '.' in normalized else ['TW', 'TWO']
+        code = normalized.split('.')[0]
+        for suffix in suffixes:
+            candidate = f'{code}.{suffix}'
+            for key in (f'taiwan-securities:v1:{suffix}', f'taiwan-securities:v1:{suffix}:stale'):
+                for asset in cache.get(key) or []:
+                    if asset['symbol'] == candidate:
+                        return asset
+        for suffix in suffixes:
+            candidate = f'{code}.{suffix}'
+            try:
+                response = httpx.get(
+                    YAHOO_CHART_URL.format(symbol=candidate),
+                    params={'range': '1d', 'interval': '1d'},
+                    headers={'User-Agent': 'Mozilla/5.0 PickingGeek/1.0'}, timeout=5.0,
+                )
+                if response.status_code == 404:
+                    continue
+                response.raise_for_status()
+                results = response.json().get('chart', {}).get('result') or []
+                meta = results[0].get('meta', {}) if results else {}
+            except (httpx.HTTPError, ValueError, TypeError, KeyError) as exc:
+                raise YahooFinanceError('Taiwan symbol verification is temporarily unavailable') from exc
+            kind = str(meta.get('instrumentType', '')).upper()
+            if meta.get('symbol', '').upper() != candidate or kind not in {'EQUITY', 'ETF'} or meta.get('currency') != 'TWD':
+                continue
+            return {
+                'symbol': candidate, 'market': 'TW', 'currency': 'TWD',
+                'name': meta.get('longName') or meta.get('shortName') or candidate,
+                'asset_type': 'ETF' if kind == 'ETF' else 'STOCK',
+                'exchange': meta.get('exchangeName', ''), 'exchange_name': meta.get('fullExchangeName', ''),
+                'sector': '', 'yahoo_url': f'https://tw.stock.yahoo.com/quote/{candidate}',
+            }
+        return None
     return next(
-        (asset for asset in search_market_assets(normalized, limit=20, market=market) if asset["symbol"] == normalized),
+        (asset for asset in search_market_assets(normalized, limit=20, market=market)
+         if asset["symbol"] == normalized or (market.upper() == 'TW' and asset['symbol'].split('.')[0] == normalized)),
         None,
     )
 
@@ -259,19 +297,21 @@ def search_taiwan_names(query: str, limit: int) -> list[dict]:
         if not isinstance(candidate, dict):
             continue
         symbol = str(candidate.get('symbol', '')).upper()
-        if re.fullmatch(r'(?:\d{4,5}|00\d{3}[A-Z])\.(?:TW|TWO)', symbol):
+        if re.fullmatch(r'(?:\d{4,5}[A-Z]?)\.(?:TW|TWO)', symbol):
             names.setdefault(symbol, str(candidate.get('name') or symbol))
     if not names:
         return []
 
     def resolve(item):
         symbol, name = item
-        matches = search_market_assets(symbol, limit=20, market='TW')
-        asset = next((asset for asset in matches if asset['symbol'] == symbol), None)
-        if asset:
-            asset = {**asset, 'name': name}
-            cache.set(f'taiwan-native-name:v1:{symbol}', name, timeout=86400)
-        return asset
+        cache.set(f'taiwan-native-name:v1:{symbol}', name, timeout=86400)
+        exchange = 'TWO' if symbol.endswith('.TWO') else 'TAI'
+        return {
+            'symbol': symbol, 'name': name, 'market': 'TW', 'currency': 'TWD',
+            'exchange': exchange, 'exchange_name': exchange, 'sector': '',
+            'asset_type': 'ETF' if symbol.startswith('00') else 'STOCK',
+            'yahoo_url': f'https://tw.stock.yahoo.com/quote/{symbol}',
+        }
 
     results = []
     with ThreadPoolExecutor(max_workers=min(6, len(names))) as executor:
@@ -289,7 +329,12 @@ def search_market_assets(query: str, limit: int = 12, market: str = 'US') -> lis
     if not normalized:
         return []
 
-    cache_key = f"yahoo-market-search:v6:{market}:{normalized.casefold()}:{limit}"
+    if market == 'TW':
+        directory_results = search_directory(normalized, limit)
+        if directory_results:
+            return directory_results
+
+    cache_key = f"yahoo-market-search:v7:{market}:{normalized.casefold()}:{limit}"
     cached = cache.get(cache_key)
     if cached is not None:
         return cached
@@ -298,6 +343,15 @@ def search_market_assets(query: str, limit: int = 12, market: str = 'US') -> lis
         results = search_taiwan_names(normalized, limit)
         cache.set(cache_key, results, timeout=300)
         return results
+
+    if market == 'TW' and re.fullmatch(r'\d{2,6}[A-Za-z]?(?:\.TW(?:O)?)?', normalized, re.I):
+        try:
+            results = search_taiwan_names(normalized, limit)
+        except YahooFinanceError:
+            results = []
+        if results:
+            cache.set(cache_key, results, timeout=300)
+            return results
 
     try:
         response = httpx.get(

@@ -262,7 +262,7 @@ function SearchView({ token, stocks, onOpen, onAdd }: { token: string; stocks: S
             >
               {isAdding ? <LoaderCircle size={17} className="animate-spin" /> : <Star size={17} fill={localStock ? "currentColor" : "none"} />}
             </button>
-            {localStock ? <button type="button" onClick={() => onOpen(localStock)} className="flex min-w-0 flex-1 items-center gap-2 text-left"><span className="min-w-0 flex-1">{details}</span><span className="text-[10px] font-semibold text-emerald-600">{t("localStock")}</span><ChevronRight size={16} className="shrink-0 text-slate-300" /></button> : <a href={result.yahoo_url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-2 text-left"><span className="min-w-0 flex-1">{details}</span><ExternalLink size={16} className="shrink-0 text-slate-400" /></a>}
+            {localStock ? <button type="button" onClick={() => onOpen(localStock)} className="flex min-w-0 flex-1 items-center gap-2 text-left"><span className="min-w-0 flex-1">{details}</span><ChevronRight size={16} className="shrink-0 text-slate-300" /></button> : <a href={result.yahoo_url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-2 text-left"><span className="min-w-0 flex-1">{details}</span><ExternalLink size={16} className="shrink-0 text-slate-400" /></a>}
           </div>;
         })}
       </div>
