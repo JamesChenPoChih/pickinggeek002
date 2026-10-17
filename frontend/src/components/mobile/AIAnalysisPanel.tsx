@@ -236,7 +236,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         </button>
       </div>
 
-      {loading && <div role="status" aria-live="polite" className="mb-4 flex items-center gap-2 text-xs text-slate-500"><LoaderCircle size={16} className="shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" /><span>Powered by Nvidia X Nebius</span></div>}
+      {loading && <div role="status" aria-live="polite" className="mb-4 flex items-center gap-2 text-xs font-normal text-slate-500"><LoaderCircle size={16} className="shrink-0 animate-spin motion-reduce:animate-none" aria-hidden="true" /><span className="min-w-0 break-words">Powered by Nebius X {mode === 'deep' ? 'Nvidia/Nemotron-3-Ultra-550b-a55b' : 'NVIDIA-Nemotron-3-Nano-30B-A3B'}</span></div>}
 
       {mode === 'deep' && <div className="mb-4 space-y-2">{peers.map((peer, index) => <div key={index} className="grid grid-cols-[1fr_70px] gap-2">
         <label className="min-w-0 text-xs text-slate-500">{index === 0 ? (zh ? '產業關聯參考' : 'Industry reference') : (zh ? '同業比較參考' : 'Peer reference')} <span className="text-[10px] text-slate-400">Optional</span>
