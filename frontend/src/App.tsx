@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { BellPlus, ChevronRight, ExternalLink, LoaderCircle, Search, Star } from "lucide-react";
+import { BellPlus, ChevronRight, ExternalLink, LoaderCircle, LockKeyhole, Search, Star } from "lucide-react";
 
 import { addYahooStock, fetchStockChart, fetchStocks, removeTrackedStock, searchYahooStocks, type AuthTokens, type AuthUser } from "./api";
 import { AIAnalysisPanel, type AnalysisRecord } from "./components/mobile/AIAnalysisPanel";
@@ -433,7 +433,7 @@ export default function App() {
               <MarketSnapshot stocks={stocks} token={token} />
             </div>
           )}
-          {activeTab === "index" && <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><div className="px-5 pb-4"><StockWheelPicker stocks={stocks} selectedId={selected.id} onSelect={id => { setSelectedId(id); setAnalysisSelection(null); }} /></div><AIAnalysisPanel stock={selected} token={token} historyStore={analysisHistory} selection={analysisSelection} onSelectHistory={item => { setSelectedId(Number(item.key.split(':')[0])); setAnalysisSelection(item); }} /></>}
+          {activeTab === "index" && (authUser?.tier === "PRO" || authUser?.tier === "PREMIUM" ? <><MarketSnapshot stocks={stocks} token={token} overviewOnly /><div className="px-5 pb-4"><StockWheelPicker stocks={stocks} selectedId={selected.id} onSelect={id => { setSelectedId(id); setAnalysisSelection(null); }} /></div><AIAnalysisPanel stock={selected} token={token} historyStore={analysisHistory} selection={analysisSelection} onSelectHistory={item => { setSelectedId(Number(item.key.split(':')[0])); setAnalysisSelection(item); }} /></> : <section className="grid min-h-full place-items-center px-8 py-10 text-center"><div className="max-w-xs"><span className="mx-auto mb-5 grid size-14 place-items-center rounded-full bg-slate-100 text-slate-600"><LockKeyhole size={24} aria-hidden="true" /></span><h1 className="text-base font-bold text-slate-950">Sorry, Pro Model &amp; Ultra Model are available to paid members only.</h1></div></section>)}
           {activeTab === "search" && <SearchView token={token} stocks={stocks} onOpen={openStock} onAdd={addStock} />}
           {activeTab === "me" && <MeView user={schema.user} onLogout={logout} />}
         </main>
