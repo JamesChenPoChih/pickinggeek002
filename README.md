@@ -10,8 +10,8 @@ A solo development project by James Chen for the **Nebius x NVIDIA Global AI Hac
 
 ## Contents
 
-1. [Project Overview](#01-project-overview)
-2. [Live Demo and Demo Video](#02-live-demo-and-demo-video)
+1. [Live Demo and Demo Video](#01-live-demo-and-demo-video)
+2. [Project Overview](#02-project-overview)
 3. [Key Features](#03-key-features)
 4. [Technology Stack](#04-technology-stack)
 5. [System Architecture](#05-system-architecture)
@@ -23,18 +23,7 @@ A solo development project by James Chen for the **Nebius x NVIDIA Global AI Hac
 11. [Roadmap](#11-roadmap)
 12. [License and Acknowledgments](#12-license-and-acknowledgments)
 
-## 01 Project Overview
-
-Investors often see indicator values without understanding how they relate to one another. Picking Geek AI combines a watchlist, interactive charts, configurable alerts, and two research modes in a mobile-oriented React PWA.
-
-| Mode | Configured inference model | Purpose |
-| --- | --- | --- |
-| **Pro Model** | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Focused interpretation of one stock's four technical indicators. |
-| **Ultra Model** | `nvidia/Nemotron-3-Ultra-550b-a55b` | Expanded technical research, news headlines, and up to two optional reference stocks. |
-
-The design uses Nano for focused technical interpretation and Ultra for a richer research context. Relative speed and accuracy have not been formally benchmarked.
-
-## 02 Live Demo and Demo Video
+## 01 Live Demo and Demo Video
 
 - **Hosted application:** [pickinggeek002.onrender.com](https://pickinggeek002.onrender.com)
 - **Source repository:** [JamesChenPoChih/pickinggeek002](https://github.com/JamesChenPoChih/pickinggeek002)
@@ -47,12 +36,28 @@ The hosted service may need time to wake up. Market data and AI responses depend
 
 ### Hackathon Demo Access
 
+- **Account:** `DemoGuest`
+- **Password:** `Demo*2479*`
+
+This is a shared demonstration account without administrative privileges. Do not store private information in it.
+
 Explore the hosted application or watch the demo video to see both analysis modes:
 
 - **Pro Model:** Focused interpretation of four technical indicators.
 - **Ultra Model:** Expanded research with optional comparison stocks and news-headline insights.
 
-Analysis and translation have basic per-user rate limits. Hosted demo credentials and account permissions are managed separately and are not published in this repository.
+The designated non-admin demo account has shared daily allowances of **20 Pro analyses** and **3 Ultra analyses**, resetting at midnight in **Asia/Taipei**. Accepted submissions count toward the allowance, including provider failures and cancellations. Basic per-minute limits also apply. The daily policy requires the updated backend deployment. See [demo policy](docs/DEMO_ACCOUNT.md).
+
+## 02 Project Overview
+
+Investors often see indicator values without understanding how they relate to one another. Picking Geek AI combines a watchlist, interactive charts, configurable alerts, and two research modes in a mobile-oriented React PWA.
+
+| Mode | Configured inference model | Purpose |
+| --- | --- | --- |
+| **Pro Model** | `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | Focused interpretation of one stock's four technical indicators. |
+| **Ultra Model** | `nvidia/Nemotron-3-Ultra-550b-a55b` | Expanded technical research, news headlines, and up to two optional reference stocks. |
+
+The design uses Nano for focused technical interpretation and Ultra for a richer research context. Relative speed and accuracy have not been formally benchmarked.
 
 ## 03 Key Features
 
@@ -181,7 +186,7 @@ Git history records implementation milestones and commit dates.
 - **Data:** Yahoo interfaces are unofficial and may change or rate-limit requests. Caching/fallbacks do not guarantee every listed/OTC instrument. Two-second polling is not exchange-certified real-time data.
 - **AI:** Grounding and schemas do not eliminate hallucinations, misinterpretation, missing context, or stale evidence. Review original sources before making decisions.
 - **News:** Headlines are retrieved, not full article research. References are optional selections, not verified competitors or partners.
-- **Usage controls:** Watchlist membership rules exist, but AI endpoints do not yet enforce separate paid-tier model entitlements or persistent daily/global spending budgets. Button names are not completed billing authorization controls.
+- **Usage controls:** Designated demo accounts have persistent daily analysis allowances. General paid-tier model entitlements and global spending budgets remain future work; button names alone are not billing authorization controls.
 - **Security:** API secrets remain on the backend. Authentication abuse prevention, token/session management, and deployment hardening remain development priorities. Public demos must not expose administrator accounts.
 - **Delivery:** In-app alerts exist; background phone push does not. A sleeping host cannot reliably evaluate conditions.
 - **History:** Analysis history and today's records live in the current frontend session, not a durable server-side archive.

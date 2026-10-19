@@ -23,7 +23,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 
 from .models import NotificationQueue, Stock, StockAlert, TechnicalIndicatorCache, User, UserStock
 from .serializers import IndicatorSerializer, StockSerializer, UserStockSerializer
-from .services.llm_router import LLMRouter, ReportFormatError, REPORT_KEYS, QUICK_REPORT_KEYS
+from .services.llm_router import LLMRouter, ReportFormatError, REPORT_KEYS, QUICK_REPORT_KEYS, choose_route
+from .services.demo_quota import DemoQuotaExceeded, LIMITS, reserve_analysis, usage_for
 from .services.analysis_context import build_analysis_context, validate_peers
 from .services.bullish import stock_assessment
 from .services.native_names import native_stock_name
@@ -294,11 +295,19 @@ def ai_analyze(request):
     except ValueError as exc:
         return Response({'detail': str(exc)}, status=400)
     language = 'en' if request.data.get('language') == 'en' else 'zh'
+    selected_mode = choose_route(question, mode).mode
+    try:
+        reserve_analysis(request.user, selected_mode)
+    except DemoQuotaExceeded:
+        _, limit, label = LIMITS[selected_mode]
+        message = (f'{label} daily demo limit reached ({limit}/{limit}). Resets at midnight in {settings.TIME_ZONE}.'
+                   if language == 'en' else
+                   f'{label} \u4eca\u65e5 Demo \u984d\u5ea6\u5df2\u7528\u5b8c\uff08{limit}/{limit}\uff09\uff0c\u65bc {settings.TIME_ZONE} \u6bcf\u65e5\u96f6\u6642\u91cd\u7f6e\u3002')
+        return Response({'detail': message, 'code': 'daily_demo_limit', 'usage': usage_for(request.user)}, status=429)
 
     def event_stream():
         try:
             router = LLMRouter()
-            selected_mode = router.choose_model(question, mode).mode
             context = build_analysis_context(stock, selected_mode, peers)
             context['language'] = language
             yield f"data: {json.dumps({'type': 'context', 'data': context}, ensure_ascii=False)}\n\n"
@@ -326,6 +335,11 @@ def ai_analyze(request):
     response["X-Accel-Buffering"] = "no"
     response['X-Analysis-Format'] = 'json-schema-v2'
     return response
+
+
+@api_view(['GET'])
+def analysis_usage(request):
+    return Response(usage_for(request.user))
 
 
 def _optional_decimal(value):

@@ -72,6 +72,18 @@ class RouteDecision:
     reason: str
 
 
+def choose_route(question: str, requested_mode: str = 'auto') -> RouteDecision:
+    mode = requested_mode.lower()
+    if mode == 'quick':
+        return RouteDecision(NANO_MODEL, 'quick', 'Explicit Pro request')
+    if mode == 'deep':
+        return RouteDecision(ULTRA_MODEL, 'deep', 'Explicit Ultra request')
+    normalized = question.lower()
+    if len(question) > 180 or any(word in normalized for word in DEEP_KEYWORDS):
+        return RouteDecision(ULTRA_MODEL, 'deep', 'Strategy or risk research')
+    return RouteDecision(NANO_MODEL, 'quick', 'Focused technical interpretation')
+
+
 class LLMRouter:
     def __init__(self):
         self.client = OpenAI(
@@ -82,15 +94,7 @@ class LLMRouter:
         )
 
     def choose_model(self, question: str, requested_mode: str = "auto") -> RouteDecision:
-        mode = requested_mode.lower()
-        if mode == "quick":
-            return RouteDecision(NANO_MODEL, "quick", "使用者指定快速回答")
-        if mode == "deep":
-            return RouteDecision(ULTRA_MODEL, "deep", "使用者指定深度報告")
-        normalized = question.lower()
-        if len(question) > 180 or any(word in normalized for word in DEEP_KEYWORDS):
-            return RouteDecision(ULTRA_MODEL, "deep", "偵測到策略或風險推理需求")
-        return RouteDecision(NANO_MODEL, "quick", "簡短指標解讀")
+        return choose_route(question, requested_mode)
 
     def translate_report(self, report, language):
         keys = REPORT_KEYS if 'strategy' in report else QUICK_REPORT_KEYS

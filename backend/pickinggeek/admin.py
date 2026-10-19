@@ -1,10 +1,22 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import KnowledgeChunk, KnowledgeDocument, NotificationQueue, PopularStock, Stock, StockAlert, StockKnowledgeState, TechnicalIndicatorCache, User, UserStock
+from .models import DemoAccount, KnowledgeChunk, KnowledgeDocument, NotificationQueue, PopularStock, Stock, StockAlert, StockKnowledgeState, TechnicalIndicatorCache, User, UserStock
 
 admin.site.register(User, UserAdmin)
 admin.site.register([Stock, UserStock, TechnicalIndicatorCache, NotificationQueue])
+
+
+@admin.register(DemoAccount)
+class DemoAccountAdmin(admin.ModelAdmin):
+    list_display = ['user', 'usage_date', 'pro_used', 'ultra_used']
+    readonly_fields = ['user', 'usage_date', 'pro_used', 'ultra_used']
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(StockAlert)

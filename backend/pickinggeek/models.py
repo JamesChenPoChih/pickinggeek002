@@ -22,6 +22,19 @@ class User(AbstractUser):
         return self.tier in (self.Tier.PRO, self.Tier.PREMIUM)
 
 
+class DemoAccount(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='demo_access')
+    usage_date = models.DateField(default=timezone.localdate)
+    pro_used = models.PositiveSmallIntegerField(default=0)
+    ultra_used = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(condition=models.Q(pro_used__gte=0, pro_used__lte=20), name='demo_pro_usage_0_20'),
+            models.CheckConstraint(condition=models.Q(ultra_used__gte=0, ultra_used__lte=3), name='demo_ultra_usage_0_3'),
+        ]
+
+
 class BillingAccount(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="billing")
     customer_id = models.CharField(max_length=255, unique=True, null=True, blank=True)

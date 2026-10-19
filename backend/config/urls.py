@@ -12,6 +12,7 @@ from pickinggeek.api import (
     UserStockViewSet,
     add_yahoo_to_watchlist,
     ai_analyze,
+    analysis_usage,
     bullish_summary,
     translate_analysis,
     google_auth_config,
@@ -58,6 +59,7 @@ urlpatterns = [
     path("api/", include(router.urls)),
     path("api/stocks/<int:stock_id>/indicator/", indicator_detail),
     path("api/ai/analyze/", ai_analyze),
+    path("api/ai/usage/", analysis_usage),
     path('api/ai/translate/', translate_analysis),
     path("api/internal/indicators/", indicator_webhook),
     re_path(

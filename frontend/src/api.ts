@@ -35,6 +35,18 @@ export async function billingRequest<T>(path = "", body?: object): Promise<T> {
   return payload as T;
 }
 export type AnalysisMode = "auto" | "quick" | "deep";
+export interface AnalysisUsage {
+  limited: boolean;
+  timezone?: string;
+  resets_at?: string;
+  quick?: { used: number; limit: number; remaining: number };
+  deep?: { used: number; limit: number; remaining: number };
+}
+export async function fetchAnalysisUsage(token: string, signal?: AbortSignal): Promise<AnalysisUsage> {
+  const response = await authorizedFetch(`${API_BASE}/ai/usage/`, token, { signal });
+  if (!response.ok) throw new Error('Analysis usage unavailable');
+  return response.json();
+}
 export interface AnalysisPeer { symbol: string; market: 'US' | 'TW'; role: 'industry' | 'peer' }
 export interface AnalysisAsset {
   symbol: string; market: string; role: string; status: string; as_of?: string; close?: number; currency?: string;

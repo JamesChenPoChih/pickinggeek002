@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Bot, ChevronLeft, ChevronRight, History, Languages, LoaderCircle, RotateCcw, Send, Sparkles } from "lucide-react";
 
-import { streamAnalysis, translateAnalysis, type AnalysisMode, type AnalysisContext, type AnalysisPeer, type QuickReport, type DetailedReport } from "../../api";
+import { streamAnalysis, translateAnalysis, fetchAnalysisUsage, type AnalysisUsage, type AnalysisMode, type AnalysisContext, type AnalysisPeer, type QuickReport, type DetailedReport } from "../../api";
 import type { StockPosition } from "../../types/stock";
 import { useLanguage } from "../../i18n";
 import AIAnswer from './AIAnswer';
@@ -32,6 +32,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
   const [answer, setAnswer] = useState("");
   const [model, setModel] = useState("");
   const [loading, setLoading] = useState(false);
+  const [usage, setUsage] = useState<AnalysisUsage | null>(null);
   const [analysisError, setAnalysisError] = useState('');
   const [context, setContext] = useState<AnalysisContext | null>(null);
   const [report, setReport] = useState<QuickReport | DetailedReport | undefined>();
@@ -46,6 +47,13 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
   const request = useRef<AbortController | null>(null);
   const zh = language === 'zh';
   const historyKey = `${stock.id}:${language}`;
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetchAnalysisUsage(token, controller.signal).then(value => {
+      if (!controller.signal.aborted) setUsage(value);
+    }).catch(() => { if (!controller.signal.aborted) setUsage(null); });
+    return () => controller.abort();
+  }, [token, loading]);
   function localizedQuestion(value: string) {
     return ['請幫我做AI分析', 'Please provide an AI analysis', '目前技術面適合分批布局嗎？',
       'Do the current technical signals support gradual buying?'].includes(value) ? t('defaultQuestion') : value;
@@ -215,6 +223,9 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         </button>
       </div>
 
+      {usage?.limited && usage.quick && usage.deep && <p role="status" className="mb-3 break-words text-[11px] text-slate-400" title={`${zh ? '\u6bcf\u65e5\u96f6\u6642\u91cd\u7f6e' : 'Resets daily at midnight'} (${usage.timezone})`}>
+        {zh ? 'Demo \u4eca\u65e5\u5269\u9918' : 'Demo remaining today'}: Pro {usage.quick.remaining}/{usage.quick.limit} · Ultra {usage.deep.remaining}/{usage.deep.limit}
+      </p>}
       <div className="mb-4 flex items-end gap-2">
         <textarea
           value={question}
