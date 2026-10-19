@@ -48,6 +48,21 @@ Explore the hosted application or watch the demo video to see both analysis mode
 
 The designated non-admin demo account has shared daily allowances of **20 Pro analyses** and **3 Ultra analyses**, resetting at midnight in **Asia/Taipei**. Accepted submissions count toward the allowance, including provider failures and cancellations. Basic per-minute limits also apply. The daily policy requires the updated backend deployment. See [demo policy](docs/DEMO_ACCOUNT.md).
 
+<table>
+  <tr>
+    <th>My Stock</th>
+    <th>AI Invest</th>
+    <th>Search</th>
+    <th>Me</th>
+  </tr>
+  <tr>
+    <td><a href="docs/screenshots/my-stock-indicators.png"><img src="docs/screenshots/my-stock-indicators.png" alt="My Stock technical indicators" width="120"></a></td>
+    <td><a href="docs/screenshots/ai-invest.png"><img src="docs/screenshots/ai-invest.png" alt="AI Invest Pro and Ultra models" width="120"></a></td>
+    <td><a href="docs/screenshots/search.png"><img src="docs/screenshots/search.png" alt="Investment search" width="120"></a></td>
+    <td><a href="docs/screenshots/me.png"><img src="docs/screenshots/me.png" alt="Account and preferences" width="120"></a></td>
+  </tr>
+</table>
+
 ## 02 Project Overview
 
 Investors often see indicator values without understanding how they relate to one another. Picking Geek AI combines a watchlist, interactive charts, configurable alerts, and two research modes in a mobile-oriented React PWA.
