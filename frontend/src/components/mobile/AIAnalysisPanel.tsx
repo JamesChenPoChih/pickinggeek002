@@ -32,6 +32,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
   const [answer, setAnswer] = useState("");
   const [model, setModel] = useState("");
   const [loading, setLoading] = useState(false);
+  const [usageLoading, setUsageLoading] = useState(true);
   const [usage, setUsage] = useState<AnalysisUsage | null>(null);
   const [analysisError, setAnalysisError] = useState('');
   const [context, setContext] = useState<AnalysisContext | null>(null);
@@ -46,12 +47,15 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
   const [todayOpen, setTodayOpen] = useState(false);
   const request = useRef<AbortController | null>(null);
   const zh = language === 'zh';
+  const canUseAI = usage?.can_use_ai === true;
   const historyKey = `${stock.id}:${language}`;
   useEffect(() => {
     const controller = new AbortController();
+    setUsageLoading(true);
     void fetchAnalysisUsage(token, controller.signal).then(value => {
       if (!controller.signal.aborted) setUsage(value);
-    }).catch(() => { if (!controller.signal.aborted) setUsage(null); });
+    }).catch(() => { if (!controller.signal.aborted) setUsage(null); })
+      .finally(() => { if (!controller.signal.aborted) setUsageLoading(false); });
     return () => controller.abort();
   }, [token, loading]);
   function localizedQuestion(value: string) {
@@ -205,7 +209,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
       <div className="mb-3 grid grid-cols-2 rounded-md bg-slate-100 p-1" aria-label={t("analysisMode")}>
         <button
           type="button"
-          disabled={loading || translating}
+          disabled={!canUseAI || loading || translating}
           aria-pressed={mode === 'quick'}
           onClick={() => setMode("quick")}
           className={`rounded px-3 py-2 text-xs font-semibold transition ${mode === "quick" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}
@@ -214,7 +218,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         </button>
         <button
           type="button"
-          disabled={loading || translating}
+          disabled={!canUseAI || loading || translating}
           aria-pressed={mode === 'deep'}
           onClick={() => setMode("deep")}
           className={`rounded px-3 py-2 text-xs font-semibold transition ${mode === "deep" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}
@@ -223,6 +227,9 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         </button>
       </div>
 
+      {usage && !canUseAI && <p role="status" className="mb-3 text-xs text-slate-500">{zh ? 'Pro 與 Ultra Model 僅限 Pro 或 Premium 付費會員使用。' : 'Pro and Ultra models are available to Pro or Premium members.'}</p>}
+      {!usage && !usageLoading && !loading && <p role="status" className="mb-3 text-xs text-slate-500">{zh ? '目前無法確認會員方案，請重新載入頁面後再試。' : 'Unable to verify membership. Reload the page and try again.'}</p>}
+
       {usage?.limited && usage.quick && usage.deep && <p role="status" className="mb-3 break-words text-[11px] text-slate-400" title={`${zh ? '\u6bcf\u65e5\u96f6\u6642\u91cd\u7f6e' : 'Resets daily at midnight'} (${usage.timezone})`}>
         {zh ? 'Demo \u4eca\u65e5\u5269\u9918' : 'Demo remaining today'}: Pro {usage.quick.remaining}/{usage.quick.limit} · Ultra {usage.deep.remaining}/{usage.deep.limit}
       </p>}
@@ -230,6 +237,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         <textarea
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
+          disabled={!canUseAI || loading || translating}
           rows={2}
           className="min-h-12 flex-1 resize-none rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none transition focus:border-slate-900"
           placeholder={t("askStock")}
@@ -238,7 +246,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         <button
           type="button"
           onClick={submitAnalysis}
-          disabled={loading || translating || !question.trim()}
+          disabled={!canUseAI || loading || translating || !question.trim()}
           className="grid size-12 shrink-0 place-items-center rounded-md bg-slate-950 text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
           aria-label={t("sendAnalysis")}
           title={t("sendAnalysis")}
@@ -251,9 +259,9 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
 
       {mode === 'deep' && <div className="mb-4 space-y-2">{peers.map((peer, index) => <div key={index} className="grid grid-cols-[1fr_70px] gap-2">
         <label className="min-w-0 text-xs text-slate-500">{index === 0 ? (zh ? '產業關聯參考' : 'Industry reference') : (zh ? '同業比較參考' : 'Peer reference')} <span className="text-[10px] text-slate-400">Optional</span>
-          <input aria-label={index === 0 ? 'Industry reference symbol' : 'Peer reference symbol'} value={peer.symbol} disabled={loading || translating} maxLength={20} onChange={event => setPeers(current => current.map((item, i) => i === index ? { ...item, symbol: event.target.value.toUpperCase() } : item))} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-2 text-base text-slate-900" />
+          <input aria-label={index === 0 ? 'Industry reference symbol' : 'Peer reference symbol'} value={peer.symbol} disabled={!canUseAI || loading || translating} maxLength={20} onChange={event => setPeers(current => current.map((item, i) => i === index ? { ...item, symbol: event.target.value.toUpperCase() } : item))} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-2 text-base text-slate-900" />
         </label>
-        <label className="text-xs text-slate-500">{zh ? '市場' : 'Market'}<select aria-label={`Comparison market ${index + 1}`} value={peer.market} disabled={loading || translating} onChange={event => setPeers(current => current.map((item, i) => i === index ? { ...item, market: event.target.value as 'US' | 'TW' } : item))} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white text-base text-slate-900"><option value="US">US</option><option value="TW">TW</option></select></label>
+        <label className="text-xs text-slate-500">{zh ? '市場' : 'Market'}<select aria-label={`Comparison market ${index + 1}`} value={peer.market} disabled={!canUseAI || loading || translating} onChange={event => setPeers(current => current.map((item, i) => i === index ? { ...item, market: event.target.value as 'US' | 'TW' } : item))} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white text-base text-slate-900"><option value="US">US</option><option value="TW">TW</option></select></label>
       </div>)}</div>}
 
 
@@ -263,7 +271,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
             <button type="button" disabled={loading || translating || !report} onClick={translateCurrent} aria-label={answerLanguage === 'zh' ? (zh ? '翻譯成英文' : 'Translate to English') : (zh ? '翻譯成中文' : 'Translate to Chinese')} title={answerLanguage === 'zh' ? (zh ? '翻譯成英文' : 'Translate to English') : (zh ? '翻譯成中文' : 'Translate to Chinese')} aria-busy={translating} className="flex h-9 shrink-0 items-center gap-1 rounded px-2 text-slate-900 hover:bg-slate-100 disabled:opacity-40">{translating ? <LoaderCircle size={18} className="animate-spin" /> : <Languages size={18} />}<span className="text-[9px] font-semibold">{answerLanguage === 'zh' ? 'EN' : '中'}</span></button>
           </div>}
           {translationError && <p role="alert" className="mb-3 text-xs text-rose-600">{translationError}</p>}
-          {analysisError ? <div role="alert"><p>{analysisError}</p><button type="button" onClick={submitAnalysis} disabled={loading || translating} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded border border-slate-300 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-100"><RotateCcw size={15} />{zh ? '重新分析' : 'Retry analysis'}</button></div> : loading && !answer ? (
+          {analysisError ? <div role="alert"><p>{analysisError}</p><button type="button" onClick={submitAnalysis} disabled={!canUseAI || loading || translating} className="mt-3 inline-flex min-h-10 items-center gap-2 rounded border border-slate-300 px-3 text-xs font-semibold text-slate-900 hover:bg-slate-100"><RotateCcw size={15} />{zh ? '重新分析' : 'Retry analysis'}</button></div> : loading && !answer ? (
             <span className="inline-flex items-center gap-2 text-slate-500">
               {t("analyzing")}
             </span>

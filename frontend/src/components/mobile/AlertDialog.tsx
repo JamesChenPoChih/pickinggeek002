@@ -5,7 +5,7 @@ import { useLanguage } from '../../i18n';
 import type { StockPosition } from '../../types/stock';
 
 type Rule = { kind: string; [key: string]: string | number };
-export interface AlertSettings { id: number | null; enabled: boolean; frequency: 'ONCE' | 'DAILY'; rules: Rule[] }
+export interface AlertSettings { id: number | null; enabled: boolean; frequency: 'ONCE' | 'DAILY'; rules: Rule[]; active_count: number; limit: number }
 type Group = 'MA' | 'MACD' | 'BB' | 'SQUEEZE';
 interface Parameter { key: string; zh: string; en: string; options?: { value: string | number; zh: string; en: string }[]; min?: number; max?: number; step?: number }
 interface Definition { kind: string; group: Group; zh: string; en: string; defaults: Rule; parameters: Parameter[] }
@@ -40,6 +40,7 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
   const [rules, setRules] = useState<Record<string, Rule>>(Object.fromEntries(definitions.map(item => [item.kind, { ...item.defaults }])));
   const [enabled, setEnabled] = useState(false);
   const [frequency, setFrequency] = useState<'ONCE' | 'DAILY'>('ONCE');
+  const [activeCount, setActiveCount] = useState(0), [alertLimit, setAlertLimit] = useState(3);
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(''), [retry, setRetry] = useState(0);
@@ -49,6 +50,7 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
     alertRequest<AlertSettings>(`stocks/${stock.id}/alert/`, { signal: controller.signal }).then(value => {
       if (controller.signal.aborted) return;
       setEnabled(value.enabled); setFrequency(value.frequency);
+      setActiveCount(value.active_count); setAlertLimit(value.limit);
       setSelected(new Set(value.rules.map(rule => rule.kind)));
       setRules(current => ({ ...current, ...Object.fromEntries(value.rules.map(rule => [rule.kind, rule])) }));
       setReady(true);
@@ -91,7 +93,8 @@ export default function AlertDialog({ stock, onClose, onSaved }: { stock: StockP
       }}>
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {loading ? <p role="status" className="py-8 text-center text-xs">{zh ? '載入中…' : 'Loading…'}</p> : <>
-            <button type="button" role="switch" aria-label={zh ? '啟用個股警示' : 'Enable stock alerts'} aria-checked={enabled} disabled={saving} onClick={() => { setEnabled(value => !value); setError(''); }} className="mb-4 flex min-h-11 w-full items-center justify-between gap-3 text-left disabled:opacity-50"><span className="text-xs font-semibold">{zh ? '啟用個股警示' : 'Enable stock alerts'}</span><span aria-hidden="true" data-checked={enabled} className="app-switch-track relative h-6 w-11 shrink-0 rounded-full transition-colors"><span className={`app-switch-thumb absolute left-0.5 top-0.5 size-5 rounded-full shadow-sm transition-transform motion-reduce:transition-none ${enabled ? 'translate-x-5' : 'translate-x-0'}`} /></span></button>
+            <button type="button" role="switch" aria-label={zh ? '啟用個股警示' : 'Enable stock alerts'} aria-checked={enabled} disabled={saving || (!enabled && activeCount >= alertLimit)} onClick={() => { setEnabled(value => !value); setError(''); }} className="mb-1 flex min-h-11 w-full items-center justify-between gap-3 text-left disabled:opacity-50"><span className="text-xs font-semibold">{zh ? '啟用個股警示' : 'Enable stock alerts'}</span><span aria-hidden="true" data-checked={enabled} className="app-switch-track relative h-6 w-11 shrink-0 rounded-full transition-colors"><span className={`app-switch-thumb absolute left-0.5 top-0.5 size-5 rounded-full shadow-sm transition-transform motion-reduce:transition-none ${enabled ? 'translate-x-5' : 'translate-x-0'}`} /></span></button>
+            <p className="mb-4 text-[10px] text-slate-400">{zh ? `啟用中的警示 ${activeCount}/${alertLimit}` : `Active alerts ${activeCount}/${alertLimit}`}</p>
             <div role="tablist" aria-label={zh ? '指標類型' : 'Indicator type'} className="mb-3 grid grid-cols-4 border-b border-slate-200">{(['MA', 'MACD', 'BB', 'SQUEEZE'] as const).map(item => <button type="button" role="tab" id={`alert-tab-${item}`} aria-controls="alert-rule-panel" tabIndex={group === item ? 0 : -1} aria-selected={group === item} key={item} onClick={() => setGroup(item)} onKeyDown={event => {
               const groups: Group[] = ['MA', 'MACD', 'BB', 'SQUEEZE'];
               if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {

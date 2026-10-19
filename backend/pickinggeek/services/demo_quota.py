@@ -39,10 +39,11 @@ def reserve_analysis(user, mode):
 def usage_for(user):
     account = DemoAccount.objects.filter(user=user).first()
     if account is None:
-        return {'limited': False}
+        return {'limited': False, 'can_use_ai': user.can_use_ai_models, 'tier': user.tier}
     today = _today()
     reset = datetime.combine(today + timedelta(days=1), time.min, ZoneInfo(settings.TIME_ZONE))
-    result = {'limited': True, 'timezone': settings.TIME_ZONE, 'resets_at': reset.isoformat()}
+    result = {'limited': True, 'can_use_ai': user.can_use_ai_models, 'tier': user.tier,
+              'timezone': settings.TIME_ZONE, 'resets_at': reset.isoformat()}
     for mode, (field, limit, _) in LIMITS.items():
         used = getattr(account, field) if account.usage_date == today else 0
         result[mode] = {'used': used, 'limit': limit, 'remaining': max(0, limit - used)}

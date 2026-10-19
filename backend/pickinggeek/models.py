@@ -21,6 +21,10 @@ class User(AbstractUser):
     def can_track_unlimited_stocks(self):
         return self.tier in (self.Tier.PRO, self.Tier.PREMIUM)
 
+    @property
+    def can_use_ai_models(self):
+        return self.tier in (self.Tier.PRO, self.Tier.PREMIUM)
+
 
 class DemoAccount(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='demo_access')

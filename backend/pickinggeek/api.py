@@ -278,6 +278,9 @@ def bullish_summary(request):
 @api_view(["POST"])
 @throttle_classes([AnalysisThrottle])
 def ai_analyze(request):
+    if not request.user.can_use_ai_models:
+        return Response({'detail': 'AI analysis requires an active Pro or Premium membership.',
+                         'code': 'paid_membership_required'}, status=status.HTTP_403_FORBIDDEN)
     if not isinstance(request.data, dict):
         return Response({'detail': 'Invalid request'}, status=400)
     question = str(request.data.get("question", "")).strip()

@@ -37,6 +37,8 @@ export async function billingRequest<T>(path = "", body?: object): Promise<T> {
 export type AnalysisMode = "auto" | "quick" | "deep";
 export interface AnalysisUsage {
   limited: boolean;
+  can_use_ai: boolean;
+  tier: AuthUser["tier"];
   timezone?: string;
   resets_at?: string;
   quick?: { used: number; limit: number; remaining: number };

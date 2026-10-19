@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from django.core.cache import cache
 from django.conf import settings
+from django.db import transaction
 
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -10,7 +11,7 @@ from rest_framework.throttling import UserRateThrottle
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .models import NotificationQueue, Stock, StockAlert
+from .models import NotificationQueue, Stock, StockAlert, User
 from .services.alerts import validate_rules
 from .services.alert_checks import check_user_alerts
 
@@ -18,6 +19,9 @@ from .services.alert_checks import check_user_alerts
 class AlertCheckThrottle(UserRateThrottle):
     scope = 'alert_checks'
     rate = '12/min'
+
+
+MAX_ACTIVE_ALERTS = 3
 
 
 @api_view(['POST'])
@@ -43,14 +47,24 @@ def stock_alert(request, stock_id):
             rules = [] if not enabled and request.data.get('rules') == [] else validate_rules(request.data.get('rules'))
         except ValueError as error:
             return Response({'detail': str(error)}, status=400)
-        alert, _ = StockAlert.objects.update_or_create(user=request.user, stock=stock, defaults={
-            'rules': rules, 'frequency': frequency, 'enabled': enabled,
-            'last_bar_at': None,
-        })
+        with transaction.atomic():
+            User.objects.select_for_update().get(pk=request.user.pk)
+            alert = StockAlert.objects.filter(user=request.user, stock=stock).first()
+            active_count = StockAlert.objects.filter(user=request.user, enabled=True).count()
+            if enabled and not (alert and alert.enabled) and active_count >= MAX_ACTIVE_ALERTS:
+                return Response({'detail': f'You can enable up to {MAX_ACTIVE_ALERTS} stock alerts.',
+                                 'code': 'active_alert_limit', 'limit': MAX_ACTIVE_ALERTS,
+                                 'active_count': active_count}, status=409)
+            alert, _ = StockAlert.objects.update_or_create(user=request.user, stock=stock, defaults={
+                'rules': rules, 'frequency': frequency, 'enabled': enabled,
+                'last_bar_at': None,
+            })
         cache.delete(f'alert-check:{request.user.pk}')
         cache.delete(f'alert-cursor:{request.user.pk}')
+    active_count = StockAlert.objects.filter(user=request.user, enabled=True).count()
     return Response({'enabled': alert.enabled if alert else False, 'rules': alert.rules if alert else [],
-                     'frequency': alert.frequency if alert else 'ONCE', 'id': alert.id if alert else None})
+                     'frequency': alert.frequency if alert else 'ONCE', 'id': alert.id if alert else None,
+                     'active_count': active_count, 'limit': MAX_ACTIVE_ALERTS})
 
 
 @api_view(['GET', 'POST'])
