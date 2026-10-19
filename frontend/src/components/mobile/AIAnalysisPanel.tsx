@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, ChevronLeft, ChevronRight, History, Languages, LoaderCircle, RotateCcw, Send, Sparkles } from "lucide-react";
+import { Bot, ChevronLeft, ChevronRight, History, Languages, LoaderCircle, LockKeyhole, RotateCcw, Send, Sparkles } from "lucide-react";
 
 import { streamAnalysis, translateAnalysis, fetchAnalysisUsage, type AnalysisUsage, type AnalysisMode, type AnalysisContext, type AnalysisPeer, type QuickReport, type DetailedReport } from "../../api";
 import type { StockPosition } from "../../types/stock";
@@ -45,6 +45,7 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
   const [history, setHistory] = useState<AnalysisRecord[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [todayOpen, setTodayOpen] = useState(false);
+  const [lockedModel, setLockedModel] = useState<Extract<AnalysisMode, 'quick' | 'deep'> | null>(null);
   const request = useRef<AbortController | null>(null);
   const zh = language === 'zh';
   const canUseAI = usage?.can_use_ai === true;
@@ -185,6 +186,16 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
         {asset.news && <><p>{zh ? '新聞標題' : 'News headlines'} · {asset.news.window_days}{zh ? ' 天' : ' days'}{asset.news.status === 'unavailable' ? (zh ? ' · 來源暫時無法取得' : ' · Source unavailable') : asset.news.status === 'empty' ? (zh ? ' · 無符合資料' : ' · No matching news') : ''}</p>{asset.news.items.map(item => <a key={item.url} href={item.url} target="_blank" rel="noopener noreferrer" className="mt-1 block break-words text-sky-600 underline">{item.title}<span className="block text-[10px] text-slate-400">{item.publisher} · {item.published_at.slice(0, 10)}</span></a>)}</>}
       </div>)}</div>;
 
+  if (lockedModel) return <section className="flex min-h-[45dvh] flex-col border-t border-slate-200 px-5 py-4" aria-labelledby="membership-required-title">
+    <header className="flex items-center gap-2 border-b border-slate-200 pb-3">
+      <button type="button" onClick={() => setLockedModel(null)} aria-label={zh ? '返回 AI Invest' : 'Back to AI Invest'} title={zh ? '返回 AI Invest' : 'Back to AI Invest'} className="grid size-10 place-items-center rounded text-slate-700 hover:bg-slate-100"><ChevronLeft size={20} /></button>
+      <h2 id="membership-required-title" className="text-sm font-bold text-slate-950">{lockedModel === 'quick' ? 'Pro Model' : 'Ultra Model'}</h2>
+    </header>
+    <div className="grid flex-1 place-items-center px-4 py-8 text-center">
+      <div className="max-w-xs"><span className="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-slate-100 text-slate-600"><LockKeyhole size={22} aria-hidden="true" /></span><p className="text-sm font-semibold leading-6 text-slate-800">Sorry, Pro Model &amp; Ultra Model are available to paid members only.</p></div>
+    </div>
+  </section>;
+
   return (
     <section className="border-t border-slate-200 px-5 py-5" aria-labelledby="ai-analysis-title">
       {todayOpen && <TodayAnalysis records={historyStore.current} onClose={() => setTodayOpen(false)} onSelect={item => { setTodayOpen(false); onSelectHistory(item); }} />}
@@ -209,25 +220,24 @@ export function AIAnalysisPanel({ stock, token, historyStore, selection, onSelec
       <div className="mb-3 grid grid-cols-2 rounded-md bg-slate-100 p-1" aria-label={t("analysisMode")}>
         <button
           type="button"
-          disabled={!canUseAI || loading || translating}
+          disabled={!usage || usageLoading || loading || translating}
           aria-pressed={mode === 'quick'}
-          onClick={() => setMode("quick")}
+          onClick={() => { if (canUseAI) setMode("quick"); else setLockedModel('quick'); }}
           className={`rounded px-3 py-2 text-xs font-semibold transition ${mode === "quick" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}
         >
           {t("quickAnswer")}
         </button>
         <button
           type="button"
-          disabled={!canUseAI || loading || translating}
+          disabled={!usage || usageLoading || loading || translating}
           aria-pressed={mode === 'deep'}
-          onClick={() => setMode("deep")}
+          onClick={() => { if (canUseAI) setMode("deep"); else setLockedModel('deep'); }}
           className={`rounded px-3 py-2 text-xs font-semibold transition ${mode === "deep" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}
         >
           {t('deepReport')}
         </button>
       </div>
 
-      {usage && !canUseAI && <p role="status" className="mb-3 text-xs text-slate-500">{zh ? 'Pro 與 Ultra Model 僅限 Pro 或 Premium 付費會員使用。' : 'Pro and Ultra models are available to Pro or Premium members.'}</p>}
       {!usage && !usageLoading && !loading && <p role="status" className="mb-3 text-xs text-slate-500">{zh ? '目前無法確認會員方案，請重新載入頁面後再試。' : 'Unable to verify membership. Reload the page and try again.'}</p>}
 
       {usage?.limited && usage.quick && usage.deep && <p role="status" className="mb-3 break-words text-[11px] text-slate-400" title={`${zh ? '\u6bcf\u65e5\u96f6\u6642\u91cd\u7f6e' : 'Resets daily at midnight'} (${usage.timezone})`}>
