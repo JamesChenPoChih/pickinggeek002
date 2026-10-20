@@ -21,9 +21,6 @@ class AlertCheckThrottle(UserRateThrottle):
     rate = '12/min'
 
 
-MAX_ACTIVE_ALERTS = 3
-
-
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 @throttle_classes([AlertCheckThrottle])
@@ -34,6 +31,7 @@ def check_alerts(request):
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def stock_alert(request, stock_id):
+    alert_limit = request.user.stock_alert_limit
     stock = get_object_or_404(Stock, pk=stock_id, followers__user=request.user)
     alert = StockAlert.objects.filter(user=request.user, stock=stock).first()
     if request.method == 'PUT':
@@ -51,9 +49,9 @@ def stock_alert(request, stock_id):
             User.objects.select_for_update().get(pk=request.user.pk)
             alert = StockAlert.objects.filter(user=request.user, stock=stock).first()
             active_count = StockAlert.objects.filter(user=request.user, enabled=True).count()
-            if enabled and not (alert and alert.enabled) and active_count >= MAX_ACTIVE_ALERTS:
-                return Response({'detail': f'You can enable up to {MAX_ACTIVE_ALERTS} stock alerts.',
-                                 'code': 'active_alert_limit', 'limit': MAX_ACTIVE_ALERTS,
+            if enabled and not (alert and alert.enabled) and active_count >= alert_limit:
+                return Response({'detail': f'You can enable up to {alert_limit} stock alerts.',
+                                 'code': 'active_alert_limit', 'limit': alert_limit,
                                  'active_count': active_count}, status=409)
             alert, _ = StockAlert.objects.update_or_create(user=request.user, stock=stock, defaults={
                 'rules': rules, 'frequency': frequency, 'enabled': enabled,
@@ -64,7 +62,7 @@ def stock_alert(request, stock_id):
     active_count = StockAlert.objects.filter(user=request.user, enabled=True).count()
     return Response({'enabled': alert.enabled if alert else False, 'rules': alert.rules if alert else [],
                      'frequency': alert.frequency if alert else 'ONCE', 'id': alert.id if alert else None,
-                     'active_count': active_count, 'limit': MAX_ACTIVE_ALERTS})
+                     'active_count': active_count, 'limit': alert_limit})
 
 
 @api_view(['GET', 'POST'])

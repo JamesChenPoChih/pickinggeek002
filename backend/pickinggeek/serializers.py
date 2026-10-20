@@ -34,11 +34,5 @@ class UserStockSerializer(serializers.ModelSerializer):
         fields = ["id", "stock", "stock_id", "created_at"]
         read_only_fields = ["created_at"]
 
-    def validate(self, attrs):
-        user = self.context["request"].user
-        if not user.can_track_unlimited_stocks and UserStock.objects.filter(user=user).exists():
-            raise serializers.ValidationError({"tier": "Free 方案最多只能追蹤 1 支股票。"})
-        return attrs
-
     def create(self, validated_data):
         return UserStock.objects.create(user=self.context["request"].user, **validated_data)

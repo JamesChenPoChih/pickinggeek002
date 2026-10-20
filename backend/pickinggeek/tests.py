@@ -1,7 +1,6 @@
 import os
 from datetime import date, timedelta
 
-from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
@@ -307,10 +306,58 @@ class TierLimitTests(TestCase):
         self.apple = Stock.objects.create(symbol="AAPL", market="US", name="Apple")
         self.nvidia = Stock.objects.create(symbol="NVDA", market="US", name="NVIDIA")
 
-    def test_free_user_can_only_track_one_stock(self):
+    def test_free_user_can_track_multiple_stocks(self):
         UserStock.objects.create(user=self.user, stock=self.apple)
-        with self.assertRaises(ValidationError):
-            UserStock.objects.create(user=self.user, stock=self.nvidia)
+        UserStock.objects.create(user=self.user, stock=self.nvidia)
+        self.assertTrue(self.user.can_track_unlimited_stocks)
+        self.assertEqual(self.user.tracked_stocks.count(), 2)
+
+    def test_free_user_can_add_more_than_five_stocks_through_api(self):
+        client = APIClient()
+        client.force_authenticate(self.user)
+        for index in range(7):
+            stock = Stock.objects.create(symbol=f'FREE{index}', market='US', name='Free stock')
+            response = client.post('/api/watchlist/', {'stock_id': stock.pk}, format='json')
+            self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.user.tracked_stocks.count(), 7)
+
+    @patch('pickinggeek.api.get_market_asset')
+    def test_free_user_can_add_yahoo_stock_to_existing_watchlist(self, asset):
+        UserStock.objects.create(user=self.user, stock=self.apple)
+        asset.return_value = {'symbol': 'NVDA', 'name': 'NVIDIA'}
+        client = APIClient()
+        client.force_authenticate(self.user)
+        response = client.post('/api/watchlist/yahoo/', {'symbol': 'NVDA'}, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(self.user.tracked_stocks.count(), 2)
+
+    def test_free_user_alert_limit_and_slot_reuse(self):
+        client = APIClient()
+        client.force_authenticate(self.user)
+        stocks = [Stock.objects.create(symbol=f'ALERT{index}', market='US', name='Alert stock')
+                  for index in range(6)]
+        for stock in stocks:
+            UserStock.objects.create(user=self.user, stock=stock)
+        payload = {'enabled': True, 'frequency': 'DAILY',
+                   'rules': [{'kind': 'ma_price_cross', 'period': 200, 'direction': 'DOWN'}]}
+        urls = [f'/api/stocks/{stock.pk}/alert/' for stock in stocks]
+        for url in urls[:5]:
+            response = client.put(url, payload, format='json')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.data['limit'], 5)
+        rejected = client.put(urls[5], payload, format='json')
+        self.assertEqual(rejected.status_code, 409)
+        self.assertEqual(rejected.data['code'], 'active_alert_limit')
+        self.assertEqual(rejected.data['active_count'], 5)
+        self.assertEqual(client.get(urls[5]).data['limit'], 5)
+        self.assertEqual(client.put(urls[0], payload, format='json').status_code, 200)
+        self.assertEqual(client.put(urls[0], {**payload, 'enabled': False}, format='json').status_code, 200)
+        self.assertEqual(client.put(urls[5], payload, format='json').status_code, 200)
+
+    def test_paid_alert_limits_are_unchanged(self):
+        for tier in (User.Tier.PRO, User.Tier.PREMIUM):
+            self.user.tier = tier
+            self.assertEqual(self.user.stock_alert_limit, 3)
 
 
 class RouterTests(TestCase):

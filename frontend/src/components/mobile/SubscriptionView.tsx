@@ -38,7 +38,7 @@ export default function SubscriptionView() {
       const current = state?.user.tier === plan.tier;
       return <section key={plan.tier} className={`rounded-md border bg-white p-4 ${current ? "border-emerald-600" : "border-slate-200"}`}>
         <div className="flex flex-wrap items-baseline justify-between gap-2"><h2 className="text-base font-bold text-slate-950">{plan.name}</h2><p className="text-base font-semibold text-slate-900">US{plan.price}<span className="text-xs font-normal text-slate-500">{plan.tier === "FREE" ? "" : zh ? " / 月" : " / month"}</span></p></div>
-        <p className="my-3 text-xs text-slate-500">{plan.tier === "FREE" ? (zh ? "追蹤 1 支股票" : "Track 1 stock") : (zh ? "不限股票追蹤數量" : "Unlimited tracked stocks")}</p>
+        <p className="my-3 text-xs text-slate-500">{zh ? "可追蹤無限支股票" : "Unlimited tracked stocks"}{plan.tier === "FREE" && (zh ? " · Alert 最多 5 支股票" : " · Alerts for up to 5 stocks")}</p>
         <button type="button" disabled={busy || !state || current || (plan.tier === "FREE" ? !subscribed : !state.configured)} onClick={() => void redirect(subscribed || plan.tier === "FREE" ? "portal/" : "checkout/", { tier: plan.tier })} className={`${button} w-full`}>
           <CreditCard size={16} />{current ? (zh ? "目前方案" : "Current plan") : subscribed ? (zh ? "管理訂閱 / 變更方案" : "Manage / change subscription") : plan.tier === "FREE" ? (zh ? "免費方案" : "Free plan") : (zh ? "訂閱" : "Subscribe")}
         </button>

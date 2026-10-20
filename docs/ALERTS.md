@@ -4,6 +4,10 @@ My Stock has a per-stock Set Alert action. Each user has one independently saved
 configuration per tracked stock. Multiple selected conditions are combined with
 OR; all hits for one completed bar are combined into one in-app notification.
 
+Free (Basic) members can track unlimited stocks and enable alerts for up to five
+stocks at a time. The API reports the account's limit to the alert settings UI.
+Paid plans retain their existing three-stock alert limit.
+
 The Enable stock alerts control is a white/dark-gray switch. New configurations
 start disabled and may be saved with an empty rule list. Enabling requires at
 least one valid condition. Disabling preserves selected rules for later use and

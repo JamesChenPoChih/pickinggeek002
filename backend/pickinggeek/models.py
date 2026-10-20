@@ -1,5 +1,4 @@
 from django.contrib.auth.models import AbstractUser
-from django.core.exceptions import ValidationError
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinLengthValidator, MinValueValidator
 from django.db import models, transaction
 from django.utils import timezone
@@ -19,7 +18,11 @@ class User(AbstractUser):
 
     @property
     def can_track_unlimited_stocks(self):
-        return self.tier in (self.Tier.PRO, self.Tier.PREMIUM)
+        return True
+
+    @property
+    def stock_alert_limit(self):
+        return 5 if self.tier == self.Tier.FREE else 3
 
     @property
     def can_use_ai_models(self):
@@ -186,15 +189,6 @@ class UserStock(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["user", "stock"], name="unique_user_stock")]
         ordering = ["-created_at"]
-
-    def clean(self):
-        if not self.user_id or self.user.can_track_unlimited_stocks:
-            return
-        query = UserStock.objects.filter(user_id=self.user_id)
-        if self.pk:
-            query = query.exclude(pk=self.pk)
-        if query.exists():
-            raise ValidationError("Free 方案最多只能追蹤 1 支股票。")
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
